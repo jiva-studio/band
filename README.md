@@ -139,25 +139,17 @@ This installs the clean `.agents/` structure:
 
 ## 💬 Developer Workflow
 
-Developers and AI agents interact naturally through slash commands:
+Developers trigger the workflow directly through chat slash commands:
 
-1. **Discover & Lock Intent:**
-   ```text
-   /intent Add course cover image picker
-   ```
-   Conducts the 5-lens interview and produces a validated `.agents/tasks/<slug>/intent.md`.
+```text
+> /intent Add course cover image picker   # 1. Runs 5-lens interview & locks intent.md
+> /spec                                   # 2. Explores codebase & generates done.yaml
+> /band                                   # 3. Runs autonomous multi-agent FSM pipeline
+```
 
-2. **Design Architecture & Generate Contract:**
-   ```text
-   /spec
-   ```
-   Explores the codebase, drafts `.agents/tasks/<slug>/spec.md`, and generates a validated `done.yaml`.
-
-3. **Autonomous Execution:**
-   ```text
-   /band
-   ```
-   Spawns specialized subagents through the FSM pipeline under the supervision of the external Stop-hook until all claims are 100% verified.
+* **`/intent <feature>`** — Conducts the 5-lens interview and produces `.agents/tasks/<slug>/intent.md`.
+* **`/spec`** — Conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
+* **`/band`** — Spawns specialized subagents through the FSM pipeline under external Stop-hook supervision until 100% verified.
 
 ## 📄 License
 
