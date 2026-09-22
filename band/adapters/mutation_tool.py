@@ -21,7 +21,6 @@ class MutationClaimTool(ClaimTool):
 
     def execute(self, claim: Dict[str, Any], context: Dict[str, Any]) -> ClaimResult:
         start_time = time.time()
-        claim_id = claim.get("id", "mutation-check")
         target = (
             claim.get("package")
             or claim.get("target")
@@ -30,6 +29,18 @@ class MutationClaimTool(ClaimTool):
             or context.get("spec_data", {}).get("target")
             or "all"
         )
+
+        # If target was specified as directory path (e.g. modules/apps/admin), resolve to package name
+        if "/" in str(target) and target != "all":
+            pkg_json = (REPO_ROOT / target / "package.json") if not Path(target).is_absolute() else (Path(target) / "package.json")
+            if pkg_json.exists():
+                try:
+                    pdata = json.loads(pkg_json.read_text(encoding="utf-8"))
+                    if "name" in pdata:
+                        target = pdata["name"]
+                except Exception:
+                    pass
+
         mode = claim.get("mode") or claim.get("params", {}).get("mode", "diff")
         timeout = claim.get("timeout", 600)
         task_dir: Optional[Path] = context.get("task_dir")
