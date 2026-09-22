@@ -8,6 +8,7 @@ def _find_repo_root() -> Path:
         if p.exists():
             return p
 
+    # 1. Try git top level from current working directory
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -22,23 +23,24 @@ def _find_repo_root() -> Path:
     except Exception:
         pass
 
-    # Check parent/sibling source directories (e.g. multi-repo layout where agent/ is sibling to source/<repo>)
-    cur = Path(__file__).resolve().parent
-    for base in [Path.cwd(), cur]:
-        for parent in [base] + list(base.parents):
-            source_dir = parent.parent / "source" if parent.name == "agent" else parent / "source"
+    # 2. Walk up parent directories to find git root, .agents, or sibling source directory
+    cur = Path.cwd()
+    for base in [cur, Path(__file__).resolve().parent]:
+        for candidate in [base] + list(base.parents):
+            # Direct git root
+            if (candidate / ".git").exists():
+                return candidate
+
+            # Multi-repo layout: check sibling/parent 'source/' directory
+            source_dir = candidate / "source" if candidate.name != "source" else candidate
             if source_dir.exists() and source_dir.is_dir():
-                for child in source_dir.iterdir():
-                    if child.is_dir() and ((child / "Makefile").exists() or (child / ".git").exists()):
-                        if child.name == parent.parent.name or child.name == "vidya":
-                            return child
-                for child in source_dir.iterdir():
-                    if child.is_dir() and (child / "Makefile").exists():
+                for child in sorted(source_dir.iterdir()):
+                    if child.is_dir() and ((child / ".git").exists() or (child / "Makefile").exists() or (child / "package.json").exists()):
                         return child
 
-    for parent in [cur] + list(cur.parents):
-        if (parent / ".git").exists() or (parent / ".agents").exists() or (parent / "pipelines").exists():
-            return parent
+            # Workspace root containing .agents
+            if (candidate / ".agents").exists() or (candidate / "pipelines").exists():
+                return candidate
 
     return Path.cwd()
 
