@@ -1,0 +1,12 @@
+{
+  "deterministic-done-gate": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 .agents/scripts/done --hook",
+        "timeout": 120
+      }
+    ]
+  }
+}

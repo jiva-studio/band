@@ -1,0 +1,25 @@
+name: docs
+description: "Documentation and spec authoring workflow"
+stages:
+  - id: authoring
+    role: "Doc Author"
+    directive: "Write documentation according to style guidelines."
+    claims:
+      - id: doc-hygiene
+        tool: hygiene
+        no_stubs: true
+
+  - id: critic
+    role: "Doc Critic"
+    directive: "Review technical clarity, accuracy, and cross-links."
+    claims:
+      - id: doc-critic
+        tool: critic
+        runner: auto
+        checks:
+          - "Technical clarity and cross-links"
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Verify all task claims in done.yaml."
+    claims: []

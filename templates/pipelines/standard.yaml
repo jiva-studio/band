@@ -1,0 +1,27 @@
+name: standard
+description: "Standard TDD workflow for regular features and components"
+stages:
+  - id: red-phase
+    role: "Test Author"
+    directive: "Author Red test suite derived from spec.md acceptance criteria and prove red failure."
+    forbid_edits: ["modules/libs/**/src/**", "modules/services/**/src/**", "modules/apps/**/src/**"]
+    claims:
+      - id: red-tests-fail
+        tool: make
+        target: test-package
+        expect: "red"
+
+  - id: green-phase
+    role: "Code Implementer"
+    directive: "Implement clean code to make tests pass without editing test files."
+    forbid_edits: ["tests/**", "**/*.spec.*", "**/specs/**"]
+    claims:
+      - id: green-tests-pass
+        tool: make
+        target: check-package
+        expect_exit: 0
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Verify all task claims in done.yaml."
+    claims: []

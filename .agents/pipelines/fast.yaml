@@ -1,0 +1,16 @@
+name: fast
+description: "Fast-path workflow for simple hotfixes, formatting, and UI styling"
+stages:
+  - id: implementation
+    role: "Solo Coder"
+    directive: "Implement fix and verify narrow tests pass."
+    claims:
+      - id: fast-check
+        tool: make
+        target: check-package
+        expect_exit: 0
+
+  - id: gatekeeper
+    role: "Gatekeeper"
+    directive: "Verify all task claims in done.yaml."
+    claims: []
