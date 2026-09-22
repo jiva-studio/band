@@ -6,7 +6,7 @@
 
 ```mermaid
 flowchart TD
-    UserReq["Feature Idea / Issue"] --> Intent["1. Intent Discovery (/intent)
+    UserReq["Feature Idea / User Prompt"] --> Intent["1. Intent Discovery (/intent)
 (5-Lens Interview & Non-Goals)"]
     Intent --> Spec["2. Technical Architecture (/spec)
 (Blast Radius & done.yaml Contract)"]
@@ -32,18 +32,43 @@ flowchart TD
 
 Band structures autonomous software engineering into three strictly gated phases:
 
-```
-[ /intent ] ──────────────► [ /spec ] ──────────────► [ /band ]
-Human & Business           Architecture & Contract     Multi-Agent FSM
-• JTBD & UX flow           • Code reconnaissance       • Red-phase (Test Author)
-• 5-Lens Interview         • Interface & DTO design    • Green-phase (Implementer)
-• Strict Non-Goals         • Blast radius matrix       • Mutation analysis (Diff)
-• Zero Code / Zero Leaks   • done.yaml Claims          • Adversarial review
-• Validator Gate           • Validator Gate            • Stop-Hook Gatekeeper
+```mermaid
+flowchart LR
+    subgraph S1["Phase 1: Intent (/intent)"]
+        direction TB
+        I1["Human & Business Layer"]
+        I2["• JTBD & UX Flow"]
+        I3["• 5-Lens Interview"]
+        I4["• Strict Non-Goals"]
+        I5["• Zero Code / Zero Leaks"]
+        I6["• Validator Gate"]
+    end
+
+    subgraph S2["Phase 2: Specification (/spec)"]
+        direction TB
+        SP1["Architecture & Contract"]
+        SP2["• Code Reconnaissance"]
+        SP3["• Interface & DTO Design"]
+        SP4["• Blast Radius Matrix"]
+        SP5["• done.yaml Claims"]
+        SP6["• Validator Gate"]
+    end
+
+    subgraph S3["Phase 3: Orchestration (/band)"]
+        direction TB
+        B1["Multi-Agent FSM"]
+        B2["• Red-Phase (Test Author)"]
+        B3["• Green-Phase (Implementer)"]
+        B4["• Mutation Analysis (Diff)"]
+        B5["• Adversarial Review"]
+        B6["• Stop-Hook Gatekeeper"]
+    end
+
+    S1 --> S2 --> S3
 ```
 
 ### 1. Intent Discovery (`/intent`)
-* **Purpose:** Defines **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
+* **Purpose:** Clarifies **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
 * **5-Lens Interview:** Clarifies JTBD, Adversarial edge cases, Non-Goals, Pre-Mortem failure modes, and Business Invariants.
 * **Anti-Pollution Rule:** Strictly forbids technical design, file paths, or code snippets in the intent document.
 * **Gate:** `python3 -m band --validate-intent .agents/tasks/<slug>/intent.md`
@@ -59,46 +84,49 @@ Human & Business           Architecture & Contract     Multi-Agent FSM
 * **Purpose:** Executes the task autonomously through specialized subagents governed by a deterministic state machine.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
-* **Gate:** `python3 -m band --hook`
+* **Gate:** Driven automatically by `.agents/hooks.json`
 
 ## 🧠 Scientific Grounding & Theoretical Foundation
 
 Autonomous LLM agents deployed on real-world codebases exhibit predictable, mathematically well-documented failure modes when left unconstrained:
 
-### 1. Inability of LLMs to Self-Correct Without Deterministic Oracles
-* **Research:** [*Huang et al. (2023), "Large Language Models Cannot Self-Correct in Reasoning Tasks without External Feedback"*, arXiv:2310.01798](https://arxiv.org/abs/2301.01798); [*Shinn et al. (2023), "Reflexion: Language Agents with Verbal Reinforcement Learning"*, NeurIPS](https://arxiv.org/abs/2303.11366).
+### 1. Separation of Intent from Specification (Anti-Pollution & Goal Drift)
+* **Research:** [*Anthropic Research (2024), "Building Effective Agents" & "Evaluating LLM Systems"*](https://www.anthropic.com/research/building-effective-agents); [*Wei et al. (2022), "Chain-of-Thought Prompting"*](https://arxiv.org/abs/2201.11903).
+* **The Problem:** When an agent is asked to simultaneously understand business requirements and write technical code, **context pollution** and **goal drift** occur: the model jumps to premature technical assumptions (e.g. inventing ad-hoc database columns) before understanding the business domain, loses track of edge cases, and overlooks non-goals.
+* **Band Solution:** Two-phase decoupling via `/intent` and `/spec`. Phase 1 captures human intent, user journeys, invariants, and strict non-goals in pure natural language (zero code). Phase 2 takes the validated intent, conducts codebase reconnaissance, and outputs an exact architectural blueprint and verification contract.
+
+### 2. Inability of LLMs to Self-Correct Without Deterministic Oracles
+* **Research:** [*Huang et al. (2023), "Large Language Models Cannot Self-Correct in Reasoning Tasks without External Feedback"*, arXiv:2310.01798](https://arxiv.org/abs/2310.01798); [*Shinn et al. (2023), "Reflexion: Language Agents with Verbal Reinforcement Learning"*, NeurIPS](https://arxiv.org/abs/2303.11366).
 * **The Problem:** LLMs cannot reliably self-evaluate their own generated code through pure intrinsic reflection; they experience confirmation bias and falsely declare broken solutions correct.
 * **Band Solution:** External Stop-hook executing real compilers, linters, test harnesses, and typecheckers to intercept exit attempts and return exact execution traces.
 
-### 2. Phase Contamination & Test Modification Gaming
+### 3. Phase Contamination & Test Modification Gaming
 * **Research:** [*Jimenez et al. (2024), "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?"*, ICLR](https://arxiv.org/abs/2310.06770).
 * **The Problem:** In monolithic prompts, agents "game" test suites by weakening assertions, deleting failing tests, or tailoring tests to match incorrect implementations.
 * **Band Solution:** Git-level `allow` and `deny` boundaries per stage. A Test Author agent is isolated to test files, while an Implementer agent is forbidden from editing test files during the Green phase.
 
-### 3. Role Specialization & Standard Operating Procedures (SOP)
+### 4. Role Specialization & Standard Operating Procedures (SOP)
 * **Research:** [*Hong et al. (2023), "MetaGPT: Meta Programming for Multi-Agent Collaborative Framework"*, ICLR 2024](https://arxiv.org/abs/2308.00352); [*Wu et al. (2023), "AutoGen: Enabling Next-Gen LLM Applications"*](https://arxiv.org/abs/2308.08155).
 * **The Problem:** Monolithic single-agent contexts become overloaded, degrading reasoning quality and losing track of non-functional invariants.
 * **Band Solution:** Explicit multi-agent decomposition where each stage defines a specialized role (`Test Author`, `Code Implementer`, `Mutation Runner`, `Adversarial Reviewer`, `Gatekeeper`) with minimal, scoped context.
 
-### 4. Mutation Testing as an Empirical Adequacy Criterion
+### 5. Mutation Testing as an Empirical Adequacy Criterion
 * **Research:** [*Jia & Harman (2011), "An Analysis and Survey of the Development of Mutation Testing"*, IEEE TSE](https://ieeexplore.ieee.org/document/5487526).
 * **The Problem:** High test coverage frequently hides vacuous assertions where tests run code without verifying critical business invariants.
 * **Band Solution:** First-class `mutation` claim adapter running diff-scoped mutation testing (e.g., Stryker/PIT) to prove test suites actively catch logic mutations before code is accepted.
 
-## 📦 Understanding Pipelines & Task Manifests
+## 📦 Pipelines & Task Contracts
 
 ### What is a Pipeline?
 
-A **Pipeline** is a declarative finite state machine (FSM) that orchestrates an engineering workflow into distinct, verifiable checkpoints. Instead of relying on an AI agent to remember a complex multi-step plan, a pipeline strictly defines:
+A **Pipeline** (`pipelines/*.yaml`) is a declarative finite state machine (FSM) that orchestrates an engineering workflow into distinct, verifiable checkpoints:
 
-1. **The Sequence of Stages:** Ordered steps from task inception to verified completion.
-2. **Subagent Roles & Directives:** The specific job title and instructions given to the subagent handling each stage.
-3. **File Boundaries (`allow` / `deny`):** Standard industry path patterns constraining what the subagent is permitted to create or modify (e.g. Test Authors cannot touch application source; Implementers cannot touch test files).
-4. **Deterministic Claims:** Machine-verifiable conditions (`make` targets, mutation score, AI reviewer checks) that MUST pass before the external Stop-hook allows advancing to the next stage.
+* **Sequence of Stages:** Ordered steps from task inception to verified completion.
+* **Subagent Roles & Directives:** The specific job title and instructions given to the subagent handling each stage.
+* **File Boundaries (`allow` / `deny`):** Standard industry path patterns constraining what the subagent is permitted to touch (e.g. Test Authors cannot touch application source; Implementers cannot touch test files).
+* **Deterministic Claims:** Machine-verifiable conditions (`make` targets, mutation score, AI reviewer checks) that MUST pass before the external Stop-hook allows advancing to the next stage.
 
 ### Built-in Pipeline Catalog
-
-Band ships with four standard pipeline profiles for different engineering workflows:
 
 | Pipeline | Target Use Case | Stages Executed |
 | :--- | :--- | :--- |
@@ -107,48 +135,9 @@ Band ships with four standard pipeline profiles for different engineering workfl
 | **`fast`** | Quick hotfixes, CSS styling, and minor UI tweaks | `implementation` ➔ `gatekeeper` |
 | **`docs`** | Technical documentation, architecture guides, schemas | `authoring` ➔ `critic` ➔ `gatekeeper` |
 
-### 1. Custom Pipeline Definition (`pipelines/my-pipeline.yaml`)
+### What is a Task Contract (`done.yaml`)?
 
-You can define custom workflows for your repository:
-
-```yaml
-name: my-pipeline
-description: "Custom pipeline for backend services"
-stages:
-  # Stage 1: Write failing unit tests
-  - id: unit-tests
-    role: "Test Engineer"
-    directive: "Write unit tests covering all spec acceptance criteria."
-    # Whitelist: only permitted to touch test files
-    allow: ["tests/**", "**/*.spec.*", "**/*.test.*"]
-    claims:
-      - id: tests-fail
-        tool: make
-        target: test
-        expect: "red"
-
-  # Stage 2: Implement production code
-  - id: implementation
-    role: "Backend Engineer"
-    directive: "Implement clean production logic to make tests pass."
-    # Blacklist: strictly forbidden from modifying test files
-    deny: ["tests/**", "**/*.spec.*", "**/*.test.*"]
-    claims:
-      - id: tests-pass
-        tool: make
-        target: test
-        expect_exit: 0
-
-  # Stage 3: Final deterministic verification
-  - id: gatekeeper
-    role: "Quality Gatekeeper"
-    directive: "Run final verification against done.yaml claims."
-    claims: []
-```
-
-### 2. Task Specification (`.agents/tasks/<slug>/done.yaml`)
-
-Every task binds to a pipeline and defines its deterministic acceptance criteria:
+A **Task Contract** (`.agents/tasks/<slug>/done.yaml`) is the single source of truth for task completion. It binds a specific task to a pipeline and defines the verifiable claims required for final acceptance.
 
 ```yaml
 slug: feat-user-auth
@@ -183,7 +172,7 @@ claims:
     no_skipped_tests: true
 ```
 
-## 🚀 Quickstart in Any Repository
+## 🚀 Quickstart
 
 Install `Band` into the root of any repository:
 
@@ -202,34 +191,27 @@ This installs the clean `.agents/` structure:
 └── tasks/                 # Task folders with intent.md, spec.md, done.yaml
 ```
 
-## 🕹 CLI Reference
+## 💬 Developer Workflow
 
-```bash
-# Validate business intent
-python3 -m band --validate-intent .agents/tasks/<slug>/intent.md
+Developers and AI agents interact naturally through slash commands in their IDE/agent chat:
 
-# Validate task specification contract
-python3 -m band --validate .agents/tasks/<slug>/done.yaml
+1. **Discover & Lock Intent:**
+   ```text
+   /intent Add course cover image picker
+   ```
+   Conducts the 5-lens interview and produces a validated `.agents/tasks/<slug>/intent.md`.
 
-# Start pipeline for a task
-python3 -m band --start-pipeline .agents/tasks/<slug>/done.yaml
+2. **Design Architecture & Generate Contract:**
+   ```text
+   /spec
+   ```
+   Explores the codebase, drafts `.agents/tasks/<slug>/spec.md`, and generates a validated `done.yaml`.
 
-# Inspect pipeline state
-python3 -m band --status .agents/tasks/<slug>/done.yaml
-
-# Run verification claims directly
-python3 -m band --spec .agents/tasks/<slug>/done.yaml
-
-# Execute Stop-hook check (called automatically by agent runner)
-python3 -m band --hook
-```
-
-## 🧪 Self-Tests
-
-```bash
-make check
-make self-test
-```
+3. **Autonomous Execution:**
+   ```text
+   /band
+   ```
+   Spawns specialized subagents through the FSM pipeline under the supervision of the external Stop-hook until all claims are 100% verified.
 
 ## 📄 License
 
