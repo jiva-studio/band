@@ -13,30 +13,23 @@ flowchart LR
 
 Band structures autonomous software engineering into three strictly gated phases:
 
-| Phase | Skill | Purpose & Problem Solved | Artifact & Gate |
-| :--- | :--- | :--- | :--- |
-| **1. Intent** | `/intent` | Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) by locking the business "Why" and Non-Goals before coding. | `.agents/tasks/<slug>/intent.md`<br/>`python3 -m band --validate-intent` |
-| **2. Specification** | `/spec` | Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) via reconnaissance and architectural contracts. | `.agents/tasks/<slug>/done.yaml`<br/>`python3 -m band --validate` |
-| **3. Orchestration** | `/band` | Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) with an external Stop-hook state machine. | Automated Multi-Agent Pipeline<br/>Driven by `.agents/hooks.json` |
-
-### 1. Intent Discovery (`/intent`)
-* **Purpose:** Clarifies **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
+### 🎯 1. Intent Discovery (`/intent`)
+* **Problem Solved:** Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) where AI models jump into premature code assumptions before understanding the business domain.
 * **5-Lens Interview:** Clarifies JTBD, Adversarial edge cases, Non-Goals, Pre-Mortem failure modes, and Business Invariants.
 * **Anti-Pollution Rule:** Strictly forbids technical design, file paths, or code snippets in the intent document.
-* **Gate:** `python3 -m band --validate-intent .agents/tasks/<slug>/intent.md`
+* **Artifact & Gate:** `.agents/tasks/<slug>/intent.md` verified via `python3 -m band --validate-intent`
 
-### 2. Technical Specification (`/spec`)
-* **Purpose:** Transforms validated intent into an architecture blueprint and a machine-readable verification contract.
-* **Reconnaissance:** Explores existing types and helpers to prevent duplicate implementations.
+### 📐 2. Technical Specification (`/spec`)
+* **Problem Solved:** Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) by requiring codebase reconnaissance before coding.
 * **Blast Radius Matrix:** Explicitly maps affected packages, modified files, and downstream consumers.
 * **Contract Generation:** Creates `.agents/tasks/<slug>/done.yaml` with declarative verification claims.
-* **Gate:** `python3 -m band --validate .agents/tasks/<slug>/done.yaml`
+* **Artifact & Gate:** `.agents/tasks/<slug>/done.yaml` verified via `python3 -m band --validate`
 
-### 3. Orchestration & Verification (`/band`)
-* **Purpose:** Executes the task autonomously through specialized subagents governed by a deterministic state machine.
+### 🥁 3. Autonomous Orchestration (`/band`)
+* **Problem Solved:** Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) by intercepting agent exits with a deterministic FSM and external Stop-hook.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
-* **Gate:** Driven automatically by `.agents/hooks.json`
+* **Artifact & Gate:** Automated Multi-Agent Pipeline driven by `.agents/hooks.json`
 
 ## ⚙️ How the FSM Engine Works
 
