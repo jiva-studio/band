@@ -34,38 +34,14 @@ Band structures autonomous software engineering into three strictly gated phases
 
 ```mermaid
 flowchart LR
-    subgraph S1["Phase 1: Intent (/intent)"]
-        direction TB
-        I1["Human & Business Layer"]
-        I2["• JTBD & UX Flow"]
-        I3["• 5-Lens Interview"]
-        I4["• Strict Non-Goals"]
-        I5["• Zero Code / Zero Leaks"]
-        I6["• Validator Gate"]
-    end
-
-    subgraph S2["Phase 2: Specification (/spec)"]
-        direction TB
-        SP1["Architecture & Contract"]
-        SP2["• Code Reconnaissance"]
-        SP3["• Interface & DTO Design"]
-        SP4["• Blast Radius Matrix"]
-        SP5["• done.yaml Claims"]
-        SP6["• Validator Gate"]
-    end
-
-    subgraph S3["Phase 3: Orchestration (/band)"]
-        direction TB
-        B1["Multi-Agent FSM"]
-        B2["• Red-Phase (Test Author)"]
-        B3["• Green-Phase (Implementer)"]
-        B4["• Mutation Analysis (Diff)"]
-        B5["• Adversarial Review"]
-        B6["• Stop-Hook Gatekeeper"]
-    end
-
-    S1 --> S2 --> S3
+    A["🎯 <b>1. Intent Discovery</b><br/><code>/intent</code><br/>5-Lens Interview & Non-Goals"] --> B["📐 <b>2. Technical Spec</b><br/><code>/spec</code><br/>Architecture & done.yaml"] --> C["🥁 <b>3. Autonomous FSM</b><br/><code>/band</code><br/>Multi-Agent Execution & Gating"]
 ```
+
+| Phase | Skill | Primary Artifact | Quality Gate |
+| :--- | :--- | :--- | :--- |
+| **1. Intent** | `/intent` | `.agents/tasks/<slug>/intent.md` | `python3 -m band --validate-intent` (Zero code leaks, 5 lenses) |
+| **2. Specification** | `/spec` | `.agents/tasks/<slug>/spec.md` + `done.yaml` | `python3 -m band --validate` (Schema, Blast Radius, Claims) |
+| **3. Orchestration** | `/band` | Multi-agent code & test implementation | External Stop-hook (100% claims verified in FSM) |
 
 ### 1. Intent Discovery (`/intent`)
 * **Purpose:** Clarifies **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
