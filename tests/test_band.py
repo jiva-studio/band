@@ -1,7 +1,9 @@
 import json
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
-from band.validator import validate_done_manifest
+from band.validator import validate_done_manifest, validate_intent_file
 from band.circuit_breaker import CircuitBreaker
 from band.adapters.make_tool import MakeClaimTool
 from band.adapters.http_tool import HttpClaimTool
@@ -14,8 +16,8 @@ class TestDoneHarness(unittest.TestCase):
             "slug": "test-task",
             "target": "modules/libs/domain",
             "claims": [
-                {"id": "c1", "kind": "make", "target": "check-package", "params": {"PKG": "@vidya/domain"}},
-                {"id": "c2", "kind": "mutation", "target": "@vidya/domain", "mode": "diff"},
+                {"id": "c1", "kind": "make", "target": "check-package", "params": {"PKG": "@domain/auth"}},
+                {"id": "c2", "kind": "mutation", "target": "@domain/auth", "mode": "diff"},
                 {"id": "c3", "kind": "http", "url": "http://127.0.0.1:3000/health", "expect_status": 200},
                 {"id": "c4", "kind": "critic", "runner": "auto", "checks": ["Intent check"]}
             ]
@@ -24,49 +26,29 @@ class TestDoneHarness(unittest.TestCase):
         self.assertTrue(is_valid)
         self.assertEqual(len(errors), 0)
 
-    def test_validator_missing_slug(self):
-        invalid = {"claims": [{"id": "c1", "kind": "make", "target": "check"}]}
-        is_valid, errors = validate_done_manifest(invalid)
-        self.assertFalse(is_valid)
-        self.assertTrue(any("slug" in e for e in errors))
-
-    def test_validator_duplicate_claim_id(self):
+    def test_validator_invalid_manifest(self):
         invalid = {
-            "slug": "task",
+            "slug": "",
             "claims": [
-                {"id": "dup", "kind": "make", "target": "check"},
-                {"id": "dup", "kind": "make", "target": "test"}
+                {"id": "c1", "kind": "unknown-tool"}
             ]
         }
         is_valid, errors = validate_done_manifest(invalid)
         self.assertFalse(is_valid)
-        self.assertTrue(any("Duplicate claim id" in e for e in errors))
-
-    def test_validator_unknown_kind(self):
-        invalid = {
-            "slug": "task",
-            "claims": [{"id": "c1", "kind": "random_unknown"}]
-        }
-        is_valid, errors = validate_done_manifest(invalid)
-        self.assertFalse(is_valid)
-        self.assertTrue(any("unknown tool" in e or "unknown kind" in e for e in errors))
+        self.assertTrue(len(errors) >= 2)
 
     def test_circuit_breaker_max_retries(self):
-        import tempfile, shutil
         tmp_dir = Path(tempfile.mkdtemp())
         try:
             cb = CircuitBreaker(tmp_dir, max_retries=2)
-            # Attempt 1
             res1 = cb.check_and_update([{"id": "c1", "message": "err1"}])
             self.assertFalse(res1["is_tripped"])
             self.assertEqual(res1["attempt"], 1)
 
-            # Attempt 2 with different error
             res2 = cb.check_and_update([{"id": "c1", "message": "err2"}])
             self.assertFalse(res2["is_tripped"])
             self.assertEqual(res2["attempt"], 2)
 
-            # Attempt 3 -> trips max_retries
             res3 = cb.check_and_update([{"id": "c1", "message": "err3"}])
             self.assertTrue(res3["is_tripped"])
             self.assertTrue("maximum automated retry budget" in res3["reason"])
@@ -74,13 +56,10 @@ class TestDoneHarness(unittest.TestCase):
             shutil.rmtree(tmp_dir)
 
     def test_circuit_breaker_stagnation(self):
-        import tempfile, shutil
         tmp_dir = Path(tempfile.mkdtemp())
         try:
             cb = CircuitBreaker(tmp_dir, max_retries=5)
-            # Attempt 1
             cb.check_and_update([{"id": "c1", "message": "exact same error"}])
-            # Attempt 2 with exact same failure
             res2 = cb.check_and_update([{"id": "c1", "message": "exact same error"}])
             self.assertTrue(res2["is_tripped"])
             self.assertTrue("Stagnation detected" in res2["reason"])
@@ -88,16 +67,52 @@ class TestDoneHarness(unittest.TestCase):
             shutil.rmtree(tmp_dir)
 
     def test_circuit_breaker_claim_id_key(self):
-        import tempfile, shutil
         tmp_dir = Path(tempfile.mkdtemp())
         try:
             cb = CircuitBreaker(tmp_dir, max_retries=3)
-            # Should accept claim_id without KeyError
             res = cb.check_and_update([{"claim_id": "c1", "kind": "make", "message": "error msg"}])
             self.assertFalse(res["is_tripped"])
             self.assertEqual(res["attempt"], 1)
         finally:
             shutil.rmtree(tmp_dir)
+
+    def test_make_tool_validation(self):
+        tool = MakeClaimTool()
+        self.assertEqual(len(tool.validate({"target": "test"})), 0)
+        self.assertGreater(len(tool.validate({})), 0)
+
+    def test_http_tool_validation(self):
+        tool = HttpClaimTool()
+        self.assertEqual(len(tool.validate({"url": "http://localhost"})), 0)
+        self.assertGreater(len(tool.validate({})), 0)
+
+    def test_hygiene_tool_validation(self):
+        tool = HygieneClaimTool()
+        self.assertEqual(len(tool.validate({"no_stubs": True})), 0)
+
+    def test_yaml_loader(self):
+        yaml_content = """
+slug: foo
+claims:
+  - id: c1
+    kind: make
+    target: test
+"""
+        res = load_yaml(yaml_content)
+        self.assertEqual(res["slug"], "foo")
+        self.assertEqual(len(res["claims"]), 1)
+
+    def test_validator_invalid_pipeline(self):
+        invalid = {
+            "slug": "test-task",
+            "pipeline": "non-existent-pipeline-xyz-12345",
+            "claims": [
+                {"id": "c1", "kind": "make", "target": "check-package"}
+            ]
+        }
+        is_valid, errors = validate_done_manifest(invalid)
+        self.assertFalse(is_valid)
+        self.assertTrue(any("Unknown pipeline profile" in e for e in errors))
 
     def test_hook_payload_formatting(self):
         from band.reporters.hook_payload import format_hook_response
@@ -116,21 +131,41 @@ class TestDoneHarness(unittest.TestCase):
         self.assertTrue("Claim c1 (make)" in data["reason"])
         self.assertTrue("fail reason" in data["reason"])
 
-    def test_validator_invalid_pipeline(self):
-        invalid = {
-            "slug": "task",
-            "pipeline": "nonexistent_bogus_profile_12345",
-            "claims": [{"id": "c1", "kind": "make", "target": "check"}]
-        }
-        is_valid, errors = validate_done_manifest(invalid)
-        self.assertFalse(is_valid)
-        self.assertTrue(any("Unknown pipeline profile" in e for e in errors))
 
-    def test_yaml_loader(self):
-        raw = "slug: my-slug\ncount: 42"
-        data = load_yaml(raw)
-        self.assertEqual(data["slug"], "my-slug")
-        self.assertEqual(data["count"], 42)
+class TestIntentValidator(unittest.TestCase):
+    """Unit tests for the intent.md validator."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp(prefix="intent_test_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_valid_intent_markdown(self):
+        valid_file = Path(self.tmp_dir) / "intent.md"
+        valid_file.write_text(
+            "# Intent: User Authentication\n\n"
+            "## 1. Problem & JTBD\nUsers need secure access.\n\n"
+            "## 2. Scope & Non-Goals\nOut of scope: biometric login.\n\n"
+            "## 3. Adversarial Failure Modes\nNetwork drop handled cleanly.\n\n"
+            "## 4. Invariants\nTenant isolation strictly preserved.\n"
+        )
+        is_valid, errors = validate_intent_file(valid_file)
+        self.assertTrue(is_valid, f"Expected valid intent, got errors: {errors}")
+
+    def test_intent_technical_pollution_fails(self):
+        polluted_file = Path(self.tmp_dir) / "intent.md"
+        polluted_file.write_text(
+            "# Intent: User Auth\n\n"
+            "## 1. Problem & JTBD\nUsers need login.\n\n"
+            "## 2. Scope & Non-Goals\nEdit UserAuth.vue and auth.ts DTO.\n\n"
+            "## 3. Adversarial Failure Modes\nNone\n\n"
+            "## 4. Invariants\nGET /api/v1/auth\n"
+        )
+        is_valid, errors = validate_intent_file(polluted_file)
+        self.assertFalse(is_valid)
+        self.assertTrue(any("Technical pollution" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

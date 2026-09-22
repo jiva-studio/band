@@ -18,12 +18,10 @@ flowchart TD
     Grill5 --> SaveIntent["4. Author .agents/tasks/<slug>/intent.md
 (100% grounded in user answers, Zero Code)"]
     SaveIntent --> Validate{"5. MANDATORY VALIDATION
-(vidya-intent-validate <file>)"}
+(python3 -m band --validate-intent <file>)"}
     Validate -->|Exit != 0 (Errors)| FixIntent["Fix intent.md violations"] --> Validate
     Validate -->|Exit 0 (Valid)| NextStep["6. Ready for `/spec` (Technical Architecture)"]
 ```
-
----
 
 ## 🚫 Strict Anti-Technical Pollution Rules (Zero Code / Zero Technical Design)
 
@@ -36,27 +34,21 @@ flowchart TD
 
 All technical decisions, database schemas, DTOs, migrations, and file-level planning belong exclusively to `/spec`.
 
----
-
 ## Step 1: Task Slug & Directory Resolution
 
-1. Extract a clean, hyphenated slug from the user request (e.g. `feat-student-enroll`, `fix-sync-outbox`).
+1. Extract a clean, hyphenated slug from the user request (e.g. `feat-user-auth`, `fix-sync-outbox`).
 2. Create the task directory and its workspace subfolders:
    ```bash
    mkdir -p ".agents/tasks/<slug>/artifacts"
    mkdir -p ".agents/tasks/<slug>/scratch"
    ```
 
----
-
 ## Step 2: Prior Art Web Research
 
 Before questioning the user, execute a web search to discover industry UX patterns, benchmarks, and known edge cases:
 1. Search for established UX patterns and product conventions (e.g. `"<feature> UI UX best practices patterns failure modes"`).
-2. Gather 3–5 real design patterns, industry leaders (e.g. Notion, Strapi, Linear, etc.), and usability failure modes.
+2. Gather 3–5 real design patterns, industry leaders, and usability failure modes.
 3. Keep findings strictly at the product and UX level (no code snippets).
-
----
 
 ## Step 3: Mandatory 5-Lens Interview Protocol
 
@@ -69,13 +61,7 @@ You MUST formulate and present questions covering all **5 mandatory lenses**:
 | **🔍 Lens 2: Adversarial & Limits (Resilience)** | File size/format limits, network drop behavior, retry mechanisms, and empty/huge input handling. |
 | **🔍 Lens 3: Negative Requirements (Non-Goals)** | Which related features, screens, or adjacent scopes are strictly OUT OF SCOPE. |
 | **🔍 Lens 4: Pre-Mortem (Failure & Recovery)** | What happens if resources are deleted/missing, fallback placeholders, replacement vs removal behavior. |
-| **🔍 Lens 5: Invariants (Security & Business)** | Tenant/school data isolation, multi-user permission boundaries, and visibility rules. |
-
-> [!CAUTION]
-> **Zero-Assumption Invariant:**
-> You are STRICTLY FORBIDDEN from inventing or guessing answers for any lens on your own. Every single lens MUST be grounded in explicit user input.
-
----
+| **🔍 Lens 5: Invariants (Security & Business)** | Multi-tenancy isolation, user permission boundaries, and visibility rules. |
 
 ## Step 4: Author `.agents/tasks/<slug>/intent.md`
 
@@ -114,19 +100,15 @@ Generate `.agents/tasks/<slug>/intent.md` strictly reflecting the user's answers
 - Invariant 2: <Access / permission rule>
 ```
 
----
-
 ## Step 5: Deterministic Validation Gate
 
 Execute the deterministic intent validator:
 ```bash
-vidya-intent-validate .agents/tasks/<slug>/intent.md
+python3 -m band --validate-intent .agents/tasks/<slug>/intent.md
 ```
 - If the validator reports errors (exit code != 0), fix `intent.md` immediately until it exits with code 0.
 - If the validator passes (exit code 0), the intent is locked and ready for `/spec`.
 
----
-
 ## Step 6: Hand Off to `/spec`
 Inform the user that the intent is validated and ready for technical specification:
-> *"Intent validated and locked in `.agents/tasks/<slug>/intent.md`. Run `/spec` to generate the technical architecture and `band.yaml`."*
+> *"Intent validated and locked in `.agents/tasks/<slug>/intent.md`. Run `/spec` to generate the technical architecture and `done.yaml`."*

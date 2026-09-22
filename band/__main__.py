@@ -12,14 +12,13 @@ if _pkg_root not in sys.path:
 
 from band.yaml_loader import load_yaml
 from band.config import TASKS_DIR, REPO_ROOT
-from band.validator import validate_done_manifest
+from band.validator import validate_done_manifest, validate_intent_file
 from band.pipeline_loader import validate_pipeline_manifest
 from band.engine import DoneEngine
 from band.pipeline_runner import PipelineRunner
 
 
 def find_active_task_spec() -> Optional[Path]:
-    # 1. Check if git branch matches a task folder in TASKS_DIR
     try:
         import subprocess
         res = subprocess.run(
@@ -36,7 +35,6 @@ def find_active_task_spec() -> Optional[Path]:
     except Exception:
         pass
 
-    # 2. Check most recently modified done.yaml or band.yaml in TASKS_DIR
     if TASKS_DIR.exists():
         candidates = []
         for name in ["done.yaml", "band.yaml"]:
@@ -53,18 +51,19 @@ def resolve_spec_path(arg_val: str) -> Optional[Path]:
     if p.is_file():
         return p
     if p.is_dir():
-        for name in ["done.yaml", "band.yaml"]:
+        for name in ["done.yaml", "band.yaml", "intent.md"]:
             if (p / name).exists():
                 return p / name
-    for name in ["done.yaml", "band.yaml"]:
+    for name in ["done.yaml", "band.yaml", "intent.md"]:
         if (TASKS_DIR / arg_val / name).exists():
             return TASKS_DIR / arg_val / name
     return None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Deterministic task completion harness and verification engine.")
+    parser = argparse.ArgumentParser(description="Band — Deterministic task completion harness and verification engine.")
     parser.add_argument("--validate", type=str, help="Validate a done.yaml / band.yaml manifest against schema.")
+    parser.add_argument("--validate-intent", type=str, help="Validate an intent.md file for anti-pollution and structural completeness.")
     parser.add_argument("--validate-pipeline", type=str, help="Validate a pipeline.yaml file against schema.")
     parser.add_argument("--pipeline", type=str, help="Specify or override pipeline profile name (e.g. hardened, standard, fast, docs).")
     parser.add_argument("--start-pipeline", type=str, nargs="?", const="", help="Initialize pipeline FSM for a task.")
@@ -75,7 +74,24 @@ def main():
 
     args = parser.parse_args()
 
-    # 1. Validate pipeline mode
+    # 1. Validate Intent Mode
+    if args.validate_intent:
+        p = resolve_spec_path(args.validate_intent)
+        if not p or not p.exists():
+            print(f"Error: intent.md file not found at {args.validate_intent}", file=sys.stderr)
+            sys.exit(1)
+
+        is_valid, errors = validate_intent_file(p)
+        if is_valid:
+            print(f"✅ intent.md at {p.name} is VALID (clean of technical pollution).")
+            sys.exit(0)
+        else:
+            print(f"❌ intent.md validation failed with {len(errors)} error(s):", file=sys.stderr)
+            for err in errors:
+                print(f"  - {err}", file=sys.stderr)
+            sys.exit(1)
+
+    # 2. Validate pipeline mode
     if args.validate_pipeline:
         p = Path(args.validate_pipeline).resolve()
         if not p.exists():
@@ -97,7 +113,7 @@ def main():
                 print(f"  - {err}", file=sys.stderr)
             sys.exit(1)
 
-    # 2. Validate manifest mode
+    # 3. Validate manifest mode
     if args.validate:
         p = resolve_spec_path(args.validate)
         if not p or not p.exists():
@@ -119,7 +135,7 @@ def main():
                 print(f"  - {err}", file=sys.stderr)
             sys.exit(1)
 
-    # 3. Start Pipeline Mode
+    # 4. Start Pipeline Mode
     if args.start_pipeline is not None:
         target_spec = resolve_spec_path(args.start_pipeline) if args.start_pipeline else find_active_task_spec()
 
@@ -134,7 +150,7 @@ def main():
         print(f"Active hooks will drive and gate each stage transition.")
         sys.exit(0)
 
-    # 4. Status Mode
+    # 5. Status Mode
     if args.status is not None:
         target_spec = resolve_spec_path(args.status) if args.status else find_active_task_spec()
 
@@ -153,7 +169,7 @@ def main():
         print(f"Completed Stages: {', '.join(state.get('stages_completed', [])) or 'None'}")
         sys.exit(0)
 
-    # 5. Hook mode (Driven by external Stop-hook)
+    # 6. Hook mode (Driven by external Stop-hook)
     if args.hook:
         try:
             if (
@@ -181,7 +197,7 @@ def main():
             }))
             sys.exit(0)
 
-    # 6. Direct execution mode
+    # 7. Direct execution mode
     target_spec = None
     if args.spec:
         target_spec = resolve_spec_path(args.spec)
