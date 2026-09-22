@@ -1,10 +1,10 @@
 name: hardened
-description: "Hardened TDD workflow with diff mutation analysis, survived mutant loop, and adversarial review for core/critical features"
+description: "Hardened TDD workflow with diff mutation analysis, survived mutant elimination, and adversarial review for core features"
 stages:
   - id: red-phase
     role: "Test Author"
-    directive: "Author Red test suite strictly derived from spec.md acceptance criteria and prove red failure."
-    forbid_edits: ["modules/libs/**/src/**", "modules/services/**/src/**", "modules/apps/**/src/**"]
+    directive: "Author Red test suite derived from spec.md acceptance criteria and prove red failure."
+    allow: ["tests/**", "**/*.test.*", "**/*.spec.*", "**/specs/**", "**/__tests__/**"]
     claims:
       - id: red-tests-fail
         tool: make
@@ -13,8 +13,8 @@ stages:
 
   - id: green-phase
     role: "Code Implementer"
-    directive: "Implement minimal clean code to turn tests green without editing test files."
-    forbid_edits: ["tests/**", "**/*.spec.*", "**/specs/**"]
+    directive: "Implement minimal clean production code to turn tests green without editing test files."
+    deny: ["tests/**", "**/*.test.*", "**/*.spec.*", "**/specs/**", "**/__tests__/**"]
     claims:
       - id: green-tests-pass
         tool: make

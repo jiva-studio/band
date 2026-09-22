@@ -4,7 +4,7 @@ stages:
   - id: red-phase
     role: "Test Author"
     directive: "Author Red test suite derived from spec.md acceptance criteria and prove red failure."
-    forbid_edits: ["modules/libs/**/src/**", "modules/services/**/src/**", "modules/apps/**/src/**"]
+    allow: ["tests/**", "**/*.test.*", "**/*.spec.*", "**/specs/**", "**/__tests__/**"]
     claims:
       - id: red-tests-fail
         tool: make
@@ -14,7 +14,7 @@ stages:
   - id: green-phase
     role: "Code Implementer"
     directive: "Implement clean code to make tests pass without editing test files."
-    forbid_edits: ["tests/**", "**/*.spec.*", "**/specs/**"]
+    deny: ["tests/**", "**/*.test.*", "**/*.spec.*", "**/specs/**", "**/__tests__/**"]
     claims:
       - id: green-tests-pass
         tool: make

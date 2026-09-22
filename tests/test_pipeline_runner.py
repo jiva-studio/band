@@ -44,3 +44,34 @@ claims:
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_stage_allow_file_boundary(self):
+        stage = {"id": "red-phase", "allow": ["tests/**", "**/*.spec.ts"]}
+        # Only test file touched
+        violations = self.runner._check_stage_file_boundaries(stage, ["tests/user.spec.ts"], [])
+        self.assertEqual(len(violations), 0)
+
+        # Implementation file touched outside allow list
+        violations = self.runner._check_stage_file_boundaries(stage, ["src/user.ts"], [])
+        self.assertEqual(len(violations), 1)
+        self.assertTrue("Disallowed modification" in violations[0])
+
+    def test_stage_deny_file_boundary(self):
+        stage = {"id": "green-phase", "deny": ["tests/**", "**/*.spec.ts"]}
+        # Implementation file touched -> passes
+        violations = self.runner._check_stage_file_boundaries(stage, ["src/user.ts"], [])
+        self.assertEqual(len(violations), 0)
+
+        # Test file touched -> blocked
+        violations = self.runner._check_stage_file_boundaries(stage, ["tests/user.spec.ts"], [])
+        self.assertEqual(len(violations), 1)
+        self.assertTrue("Denied modification" in violations[0])
+
+    def test_stage_allow_and_deny_combined(self):
+        stage = {"id": "custom", "allow": ["src/**"], "deny": ["src/secret/**"]}
+        # src/user.ts -> passes
+        self.assertEqual(len(self.runner._check_stage_file_boundaries(stage, ["src/user.ts"], [])), 0)
+        # src/secret/keys.ts -> denied
+        self.assertEqual(len(self.runner._check_stage_file_boundaries(stage, ["src/secret/keys.ts"], [])), 1)
+        # docs/readme.md -> disallowed (not in allow)
+        self.assertEqual(len(self.runner._check_stage_file_boundaries(stage, ["docs/readme.md"], [])), 1)

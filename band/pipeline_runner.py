@@ -94,16 +94,33 @@ class PipelineRunner:
         except Exception:
             return []
 
-    def _check_forbidden_edits(self, forbid_patterns: List[str], current_files: List[str], baseline_files: List[str]) -> List[str]:
-        """Checks for forbidden files modified during the current stage relative to baseline."""
-        # Files newly touched in this stage
+    def _matches_any_pattern(self, file_path: str, patterns: List[str]) -> bool:
+        for pattern in patterns:
+            if fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(Path(file_path).name, pattern) or pattern in file_path:
+                return True
+        return False
+
+    def _check_stage_file_boundaries(self, stage: Dict[str, Any], current_files: List[str], baseline_files: List[str]) -> List[str]:
+        """Validates stage allow/deny file boundaries against newly modified files relative to baseline."""
         newly_modified = [f for f in current_files if f not in baseline_files]
+        if not newly_modified:
+            return []
+
+        allow_patterns = stage.get("allow") or stage.get("allow_edits") or stage.get("include") or []
+        deny_patterns = stage.get("deny") or stage.get("deny_edits") or stage.get("forbid_edits") or stage.get("exclude") or []
+
         violations = []
         for f in newly_modified:
-            for pattern in forbid_patterns:
-                if fnmatch.fnmatch(f, pattern) or pattern in f:
-                    violations.append(f)
+            if deny_patterns and self._matches_any_pattern(f, deny_patterns):
+                violations.append(f"Denied modification: '{f}'")
+                continue
+            if allow_patterns and not self._matches_any_pattern(f, allow_patterns):
+                violations.append(f"Disallowed modification (not in allow list): '{f}'")
+
         return violations
+
+    def _check_forbidden_edits(self, forbid_patterns: List[str], current_files: List[str], baseline_files: List[str]) -> List[str]:
+        return self._check_stage_file_boundaries({"deny": forbid_patterns}, current_files, baseline_files)
 
     def _evaluate_stage_claims(self, stage: Dict[str, Any], manifest: Dict[str, Any]) -> Tuple[bool, List[Dict[str, Any]], str]:
         """Evaluates stage claims using the unified DoneEngine and claim tools."""
