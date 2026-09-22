@@ -5,61 +5,53 @@
 `Band` is a lightweight, zero-dependency execution harness and external verification engine. It drives AI agents through arbitrary, declarative multi-stage pipelines (TDD, mutation analysis, adversarial audits, multi-tier quality gates) with deterministic state machines and external Stop-hook enforcement.
 
 ```mermaid
-flowchart TD
-    UserReq["Feature Idea / User Prompt"] --> Intent["1. Intent Discovery (/intent)
-(5-Lens Interview & Non-Goals)"]
-    Intent --> Spec["2. Technical Architecture (/spec)
-(Blast Radius & done.yaml Contract)"]
-    Spec --> Band["3. Autonomous Orchestration (/band)
-(Multi-Agent FSM Pipeline)"]
-
-    subgraph FSM_Loop["Band Execution Harness"]
-        StageInit["Stage N: Role & Directive Dispatch"] --> Sandbox["Stage Boundary: allow & deny Enforcer"]
-        Sandbox --> AgentExec["Subagent Execution"]
-        AgentExec --> StopHook{"External Stop-Hook Interception"}
-        StopHook -- "Claims Failed" --> FailureFeedback["Actionable Failure Payload + Circuit Breaker"]
-        FailureFeedback --> AgentExec
-        StopHook -- "Claims Passed" --> Advance["Advance to Stage N+1"]
-        Advance --> StageInit
-    end
-
-    Band --> FSM_Loop
-    FSM_Loop --> TerminalGate{"All Stages Complete?"}
-    TerminalGate -- Yes --> Verified["🎉 Task Verified & Accepted"]
+flowchart LR
+    A["💡 <b>Feature Request</b>"] --> B["🎯 <b>1. Intent Discovery</b><br/><code>/intent</code>"] --> C["📐 <b>2. Spec & Contract</b><br/><code>/spec</code>"] --> D["🥁 <b>3. Autonomous FSM</b><br/><code>/band</code>"] --> E["🎉 <b>Verified Code</b>"]
 ```
 
 ## 🔄 The 3-Step Autonomous Engineering Lifecycle
 
 Band structures autonomous software engineering into three strictly gated phases:
 
-```mermaid
-flowchart LR
-    A["🎯 <b>1. Intent Discovery</b><br/><code>/intent</code><br/>5-Lens Interview & Non-Goals"] --> B["📐 <b>2. Technical Spec</b><br/><code>/spec</code><br/>Architecture & done.yaml"] --> C["🥁 <b>3. Autonomous FSM</b><br/><code>/band</code><br/>Multi-Agent Execution & Gating"]
-```
-
-| Phase | Skill | Primary Artifact | Quality Gate |
+| Phase | Skill | Purpose & Problem Solved | Artifact & Gate |
 | :--- | :--- | :--- | :--- |
-| **1. Intent** | `/intent` | `.agents/tasks/<slug>/intent.md` | `python3 -m band --validate-intent` (Zero code leaks, 5 lenses) |
-| **2. Specification** | `/spec` | `.agents/tasks/<slug>/spec.md` + `done.yaml` | `python3 -m band --validate` (Schema, Blast Radius, Claims) |
-| **3. Orchestration** | `/band` | Multi-agent code & test implementation | External Stop-hook (100% claims verified in FSM) |
+| **1. Intent** | `/intent` | Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) by locking the business "Why" and Non-Goals before coding. | `.agents/tasks/<slug>/intent.md`<br/>`python3 -m band --validate-intent` |
+| **2. Specification** | `/spec` | Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) via reconnaissance and architectural contracts. | `.agents/tasks/<slug>/done.yaml`<br/>`python3 -m band --validate` |
+| **3. Orchestration** | `/band` | Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) with an external Stop-hook state machine. | Automated Multi-Agent Pipeline<br/>Driven by `.agents/hooks.json` |
 
 ### 1. Intent Discovery (`/intent`)
-* **Problem Solved:** Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) where AI models jump into premature code assumptions before understanding the business domain.
+* **Purpose:** Clarifies **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
 * **5-Lens Interview:** Clarifies JTBD, Adversarial edge cases, Non-Goals, Pre-Mortem failure modes, and Business Invariants.
 * **Anti-Pollution Rule:** Strictly forbids technical design, file paths, or code snippets in the intent document.
 * **Gate:** `python3 -m band --validate-intent .agents/tasks/<slug>/intent.md`
 
 ### 2. Technical Specification (`/spec`)
-* **Problem Solved:** Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) by requiring codebase reconnaissance before coding.
+* **Purpose:** Transforms validated intent into an architecture blueprint and a machine-readable verification contract.
+* **Reconnaissance:** Explores existing types and helpers to prevent duplicate implementations.
 * **Blast Radius Matrix:** Explicitly maps affected packages, modified files, and downstream consumers.
 * **Contract Generation:** Creates `.agents/tasks/<slug>/done.yaml` with declarative verification claims.
 * **Gate:** `python3 -m band --validate .agents/tasks/<slug>/done.yaml`
 
 ### 3. Orchestration & Verification (`/band`)
-* **Problem Solved:** Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) by intercepting agent exits with a deterministic FSM and external Stop-hook.
+* **Purpose:** Executes the task autonomously through specialized subagents governed by a deterministic state machine.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
 * **Gate:** Driven automatically by `.agents/hooks.json`
+
+## ⚙️ How the FSM Engine Works
+
+```mermaid
+flowchart LR
+    Dispatch["1. Stage Dispatch<br/>(Role & Directive)"] --> Guard["2. Git Boundary<br/>(allow / deny)"] --> Agent["3. Agent Execution"] --> Hook{"4. Stop-Hook<br/>Claims Passed?"}
+    Hook -- "No" --> Retry["Circuit Breaker & Feedback"] --> Agent
+    Hook -- "Yes" --> Next["Advance to Stage N+1"]
+```
+
+1. **Declarative Stages (`pipelines/*.yaml`):** Ordered steps (e.g. Red ➔ Green ➔ Mutation ➔ Review ➔ Gate).
+2. **Subagent Scoping:** Subagents are given minimal directives with strict file boundaries (`allow` / `deny`).
+3. **External Stop-Hook:** When an agent attempts to stop or complete, the hook intercepts and evaluates stage claims.
+4. **Circuit Breaker:** Trips if identical failures repeat across consecutive attempts, preventing infinite hallucination loops.
+5. **Zero External Dependencies:** Built on the Python 3 standard library (`subprocess`, `json`, `hashlib`, `unittest`).
 
 ## 🧠 Scientific Grounding & Theoretical Foundation
 
@@ -87,15 +79,6 @@ Autonomous LLM agents deployed on real-world codebases exhibit predictable failu
 
 ## 📦 Pipelines & Task Contracts
 
-### What is a Pipeline?
-
-A **Pipeline** (`pipelines/*.yaml`) is a declarative finite state machine (FSM) that orchestrates an engineering workflow into distinct, verifiable checkpoints:
-
-* **Sequence of Stages:** Ordered steps from task inception to verified completion.
-* **Subagent Roles & Directives:** The specific job title and instructions given to the subagent handling each stage.
-* **File Boundaries (`allow` / `deny`):** Standard industry path patterns constraining what the subagent is permitted to touch (e.g. Test Authors cannot touch application source; Implementers cannot touch test files).
-* **Deterministic Claims:** Machine-verifiable conditions (`make` targets, mutation score, AI reviewer checks) that MUST pass before the external Stop-hook allows advancing to the next stage.
-
 ### Built-in Pipeline Catalog
 
 | Pipeline | Target Use Case | Stages Executed |
@@ -105,9 +88,9 @@ A **Pipeline** (`pipelines/*.yaml`) is a declarative finite state machine (FSM) 
 | **`fast`** | Quick hotfixes, CSS styling, and minor UI tweaks | `implementation` ➔ `gatekeeper` |
 | **`docs`** | Technical documentation, architecture guides, schemas | `authoring` ➔ `critic` ➔ `gatekeeper` |
 
-### What is a Task Contract (`done.yaml`)?
+### Task Specification (`.agents/tasks/<slug>/done.yaml`)
 
-A **Task Contract** (`.agents/tasks/<slug>/done.yaml`) is the single source of truth for task completion. It binds a specific task to a pipeline and defines the verifiable claims required for final acceptance.
+A **Task Contract** (`done.yaml`) is the single source of truth for task completion:
 
 ```yaml
 slug: feat-user-auth
@@ -163,7 +146,7 @@ This installs the clean `.agents/` structure:
 
 ## 💬 Developer Workflow
 
-Developers and AI agents interact naturally through slash commands in their IDE/agent chat:
+Developers and AI agents interact naturally through slash commands:
 
 1. **Discover & Lock Intent:**
    ```text
