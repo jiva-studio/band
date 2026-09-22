@@ -17,11 +17,17 @@ class PipelineRunner:
     def __init__(self, spec_path: Path):
         self.spec_path = spec_path
         self.task_dir = spec_path.parent
-        self.state_file = self.task_dir / "artifacts" / "state.json"
+        self.state_file = self.task_dir / "state.json"
         self.cache = ClaimCache(self.task_dir)
 
     def read_state(self) -> Dict[str, Any]:
         if not self.state_file.exists():
+            legacy_state = self.task_dir / "artifacts" / "state.json"
+            if legacy_state.exists():
+                try:
+                    return json.loads(legacy_state.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
             return {}
         try:
             return json.loads(self.state_file.read_text(encoding="utf-8"))

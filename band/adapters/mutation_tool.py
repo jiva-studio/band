@@ -3,7 +3,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from band.ports.claim_tool import ClaimTool, ClaimResult
 from band.config import REPO_ROOT
 
@@ -21,6 +21,7 @@ class MutationClaimTool(ClaimTool):
 
     def execute(self, claim: Dict[str, Any], context: Dict[str, Any]) -> ClaimResult:
         start_time = time.time()
+        claim_id = claim.get("id", "mutation")
         target = (
             claim.get("package")
             or claim.get("target")
