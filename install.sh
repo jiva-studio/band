@@ -11,13 +11,15 @@ AGENTS_DIR="${TARGET_DIR}/.agents"
 
 echo "🥁 Installing Band Agent Harness into: ${AGENTS_DIR}"
 
-# Determine source location (local repo or remote download)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd || echo "")"
 
-if [[ -d "${SCRIPT_DIR}/templates" ]]; then
-  # Local template source
+if [[ -d "${SCRIPT_DIR}/band" && -d "${SCRIPT_DIR}/pipelines" ]]; then
+  # Local source directory
   mkdir -p "${AGENTS_DIR}"
-  cp -r "${SCRIPT_DIR}/templates/"* "${AGENTS_DIR}/"
+  cp -r "${SCRIPT_DIR}/band" "${AGENTS_DIR}/"
+  cp -r "${SCRIPT_DIR}/pipelines" "${AGENTS_DIR}/"
+  cp -r "${SCRIPT_DIR}/skills" "${AGENTS_DIR}/"
+  cp "${SCRIPT_DIR}/hooks.json" "${AGENTS_DIR}/"
 else
   # Remote curl execution
   TMP_DIR="$(mktemp -d)"
@@ -27,14 +29,16 @@ else
   if command -v git >/dev/null 2>&1; then
     git clone --depth 1 https://github.com/jiva-studio/band.git "${TMP_DIR}/band" >/dev/null 2>&1
     mkdir -p "${AGENTS_DIR}"
-    cp -r "${TMP_DIR}/band/templates/"* "${AGENTS_DIR}/"
+    cp -r "${TMP_DIR}/band/band" "${AGENTS_DIR}/"
+    cp -r "${TMP_DIR}/band/pipelines" "${AGENTS_DIR}/"
+    cp -r "${TMP_DIR}/band/skills" "${AGENTS_DIR}/"
+    cp "${TMP_DIR}/band/hooks.json" "${AGENTS_DIR}/"
   else
-    echo "Error: 'git' is required to fetch templates." >&2
+    echo "Error: 'git' is required to fetch Band." >&2
     exit 1
   fi
 fi
 
-# Ensure permissions
 chmod -R u+rw "${AGENTS_DIR}"
 
 echo "✅ Band harness successfully installed at ${AGENTS_DIR}"
@@ -42,4 +46,4 @@ echo ""
 echo "Next steps:"
 echo "  1. Review pipelines in .agents/pipelines/"
 echo "  2. Register .agents/hooks.json with your agent runner"
-echo "  3. Start a pipeline with: python3 -m .agents.scripts.done --start-pipeline .agents/tasks/<task-slug>/done.yaml"
+echo "  3. Start a pipeline with: PYTHONPATH=.agents python3 -m band --start-pipeline .agents/tasks/<task-slug>/done.yaml"

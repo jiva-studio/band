@@ -1,0 +1,12 @@
+{
+  "deterministic-done-gate": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 -m band --hook",
+        "timeout": 120
+      }
+    ]
+  }
+}

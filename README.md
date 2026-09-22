@@ -52,9 +52,9 @@ Autonomous LLM agents deployed on real-world codebases exhibit predictable, math
 
 Band is **completely generic and data-driven**. The engine contains zero hardcoded stage names, package paths, or project-specific logic.
 
-1. **Declarative Pipelines (`.agents/pipelines/*.yaml`):** Define any arbitrary sequence of stages, permitted/forbidden file patterns, and claims to evaluate.
+1. **Declarative Pipelines (`pipelines/*.yaml`):** Define any arbitrary sequence of stages, permitted/forbidden file patterns, and claims to evaluate.
 2. **Task Manifests (`done.yaml`):** Declare the target package, the desired pipeline profile, and acceptance claims (`make`, `mutation`, `critic`, `hygiene`).
-3. **External Stop-Hook:** Registered in `.agents/hooks.json`. When an agent attempts to stop or declare completion, the hook runs `python3 -m done --hook`, verifying that all claims for the active stage are green.
+3. **External Stop-Hook:** Registered in `hooks.json`. When an agent attempts to stop or declare completion, the hook runs `python3 -m band --hook`, verifying that all claims for the active stage are green.
 4. **Circuit Breaker:** Prevents infinite hallucination loops by tripping if the exact same failure repeats across consecutive attempts.
 5. **Zero External Dependencies:** Built on the Python 3 standard library (`subprocess`, `json`, `hashlib`, `unittest`). No external daemons, servers, or packages needed.
 
@@ -66,21 +66,20 @@ Install `Band` into the root of any repository:
 curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
 ```
 
-This scaffolds the portable `.agents/` layout:
+This installs the clean `.agents/` structure:
 
 ```text
 .agents/
 ├── hooks.json             # Stop-hook configuration
-├── pipelines/             # Declarative pipeline templates (standard, hardened, fast, docs)
-├── scripts/
-│   └── done/              # Verification FSM engine & zero-dependency YAML loader
-├── skills/                # Agent skill manifests (/band, /spec, /intent, /coder)
+├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
+├── band/                  # Python FSM verification engine & zero-dependency YAML loader
+├── skills/                # Agent skills (/band, /spec, /intent, /coder)
 └── tasks/                 # Task folders with done.yaml specifications
 ```
 
 ## 📦 Defining Pipelines & Task Manifests
 
-### 1. Custom Pipeline Definition (`.agents/pipelines/my-pipeline.yaml`)
+### 1. Custom Pipeline Definition (`pipelines/my-pipeline.yaml`)
 
 ```yaml
 name: my-pipeline
@@ -147,16 +146,16 @@ claims:
 
 ```bash
 # Start pipeline for a task
-python3 -m .agents.scripts.done --start-pipeline .agents/tasks/<slug>/done.yaml
+python3 -m band --start-pipeline .agents/tasks/<slug>/done.yaml
 
 # Inspect pipeline state
-python3 -m .agents.scripts.done --status .agents/tasks/<slug>/done.yaml
+python3 -m band --status .agents/tasks/<slug>/done.yaml
 
 # Run verification claims directly
-python3 -m .agents.scripts.done --spec .agents/tasks/<slug>/done.yaml
+python3 -m band --spec .agents/tasks/<slug>/done.yaml
 
 # Execute Stop-hook check (called automatically by agent runner)
-python3 -m .agents.scripts.done --hook
+python3 -m band --hook
 ```
 
 ## 🧪 Self-Tests
