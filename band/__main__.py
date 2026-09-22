@@ -16,6 +16,7 @@ from band.validator import validate_done_manifest, validate_intent_file
 from band.pipeline_loader import validate_pipeline_manifest
 from band.engine import DoneEngine
 from band.pipeline_runner import PipelineRunner
+from band.guard import run_guard
 
 
 def find_active_task_spec() -> Optional[Path]:
@@ -71,8 +72,14 @@ def main():
     parser.add_argument("--spec", type=str, help="Run verification against specific spec path.")
     parser.add_argument("--task", type=str, help="Run verification for specific task slug in tasks/<slug>.")
     parser.add_argument("--hook", action="store_true", help="Run in Stop-hook mode with JSON stdin/stdout.")
+    parser.add_argument("--guard", action="store_true", help="Run in PreToolUse security gate mode.")
 
     args = parser.parse_args()
+
+    # 0. PreToolUse Security Gate
+    if args.guard:
+        run_guard()
+
 
     # 1. Validate Intent Mode
     if args.validate_intent:

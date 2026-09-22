@@ -41,9 +41,27 @@ fi
 
 chmod -R u+rw "${AGENTS_DIR}"
 
+# Create ignore files for agents without active hooks support
+for ignore_file in "${TARGET_DIR}/.cursorignore" "${TARGET_DIR}/.rooignore" "${TARGET_DIR}/.clineignore" "${TARGET_DIR}/.aiderignore"; do
+  if [[ ! -f "${ignore_file}" ]] || ! grep -q "artifacts/state.json" "${ignore_file}" 2>/dev/null; then
+    mkdir -p "$(dirname "${ignore_file}")"
+    cat <<'EOF' >> "${ignore_file}"
+# Band protected state and pipeline definitions
+**/.agents/tasks/*/artifacts/state.json
+**/.agents/pipelines/**
+**/.agents/band/**
+EOF
+  fi
+done
+
 echo "✅ Band harness successfully installed at ${AGENTS_DIR}"
+echo ""
+echo "Security & Verification Gates Enabled:"
+echo "  🛡️ PreToolUse Gate:  python3 -m band --guard (protects state.json & pipelines)"
+echo "  🛑 Stop Hook:        python3 -m band --hook  (validates stage claims & FSM)"
 echo ""
 echo "Next steps:"
 echo "  1. Review pipelines in .agents/pipelines/"
 echo "  2. Register .agents/hooks.json with your agent runner"
 echo "  3. Start a pipeline with: PYTHONPATH=.agents python3 -m band --start-pipeline .agents/tasks/<task-slug>/done.yaml"
+
