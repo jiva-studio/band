@@ -44,51 +44,45 @@ flowchart LR
 | **3. Orchestration** | `/band` | Multi-agent code & test implementation | External Stop-hook (100% claims verified in FSM) |
 
 ### 1. Intent Discovery (`/intent`)
-* **Purpose:** Clarifies **why** the task is needed, **what** user/business problem it solves, and **what is strictly out of scope**.
+* **Problem Solved:** Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) where AI models jump into premature code assumptions before understanding the business domain.
 * **5-Lens Interview:** Clarifies JTBD, Adversarial edge cases, Non-Goals, Pre-Mortem failure modes, and Business Invariants.
 * **Anti-Pollution Rule:** Strictly forbids technical design, file paths, or code snippets in the intent document.
 * **Gate:** `python3 -m band --validate-intent .agents/tasks/<slug>/intent.md`
 
 ### 2. Technical Specification (`/spec`)
-* **Purpose:** Transforms validated intent into an architecture blueprint and a machine-readable verification contract.
-* **Reconnaissance:** Explores existing types and helpers to prevent duplicate implementations.
+* **Problem Solved:** Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) by requiring codebase reconnaissance before coding.
 * **Blast Radius Matrix:** Explicitly maps affected packages, modified files, and downstream consumers.
 * **Contract Generation:** Creates `.agents/tasks/<slug>/done.yaml` with declarative verification claims.
 * **Gate:** `python3 -m band --validate .agents/tasks/<slug>/done.yaml`
 
 ### 3. Orchestration & Verification (`/band`)
-* **Purpose:** Executes the task autonomously through specialized subagents governed by a deterministic state machine.
+* **Problem Solved:** Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) by intercepting agent exits with a deterministic FSM and external Stop-hook.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
 * **Gate:** Driven automatically by `.agents/hooks.json`
 
 ## 🧠 Scientific Grounding & Theoretical Foundation
 
-Autonomous LLM agents deployed on real-world codebases exhibit predictable, mathematically well-documented failure modes when left unconstrained:
+Autonomous LLM agents deployed on real-world codebases exhibit predictable failure modes when left unconstrained. Band's architecture directly solves these empirical problems:
 
 ### 1. Separation of Intent from Specification (Anti-Pollution & Goal Drift)
-* **Research:** [*Anthropic Research (2024), "Building Effective Agents" & "Evaluating LLM Systems"*](https://www.anthropic.com/research/building-effective-agents); [*Wei et al. (2022), "Chain-of-Thought Prompting"*](https://arxiv.org/abs/2201.11903).
-* **The Problem:** When an agent is asked to simultaneously understand business requirements and write technical code, **context pollution** and **goal drift** occur: the model jumps to premature technical assumptions (e.g. inventing ad-hoc database columns) before understanding the business domain, loses track of edge cases, and overlooks non-goals.
-* **Band Solution:** Two-phase decoupling via `/intent` and `/spec`. Phase 1 captures human intent, user journeys, invariants, and strict non-goals in pure natural language (zero code). Phase 2 takes the validated intent, conducts codebase reconnaissance, and outputs an exact architectural blueprint and verification contract.
+* **The Problem:** When an AI agent is asked to simultaneously understand business requirements and write technical code, it suffers from [severe context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents): the model jumps to premature technical assumptions (e.g. ad-hoc database schemas), skips critical business edge cases, and loses sight of non-goals [without structured decomposition (Wei et al., 2022)](https://arxiv.org/abs/2201.11903).
+* **Band Solution:** Two-phase decoupling via `/intent` and `/spec`. Phase 1 captures human intent, user journeys, invariants, and strict non-goals in pure natural language (zero code). Phase 2 takes the validated intent, conducts codebase reconnaissance, and outputs an exact architectural blueprint and verification contract (`done.yaml`).
 
 ### 2. Inability of LLMs to Self-Correct Without Deterministic Oracles
-* **Research:** [*Huang et al. (2023), "Large Language Models Cannot Self-Correct in Reasoning Tasks without External Feedback"*, arXiv:2310.01798](https://arxiv.org/abs/2310.01798); [*Shinn et al. (2023), "Reflexion: Language Agents with Verbal Reinforcement Learning"*, NeurIPS](https://arxiv.org/abs/2303.11366).
-* **The Problem:** LLMs cannot reliably self-evaluate their own generated code through pure intrinsic reflection; they experience confirmation bias and falsely declare broken solutions correct.
+* **The Problem:** Empirical research shows that [LLMs cannot reliably self-evaluate or self-correct generated code through intrinsic reflection (Huang et al., 2023)](https://arxiv.org/abs/2310.01798). Without external feedback loops [like executable test oracles (Shinn et al., 2023)](https://arxiv.org/abs/2303.11366), agents experience confirmation bias and falsely declare broken solutions correct.
 * **Band Solution:** External Stop-hook executing real compilers, linters, test harnesses, and typecheckers to intercept exit attempts and return exact execution traces.
 
 ### 3. Phase Contamination & Test Modification Gaming
-* **Research:** [*Jimenez et al. (2024), "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?"*, ICLR](https://arxiv.org/abs/2310.06770).
-* **The Problem:** In monolithic prompts, agents "game" test suites by weakening assertions, deleting failing tests, or tailoring tests to match incorrect implementations.
-* **Band Solution:** Git-level `allow` and `deny` boundaries per stage. A Test Author agent is isolated to test files, while an Implementer agent is forbidden from editing test files during the Green phase.
+* **The Problem:** In unconstrained monolithic prompts, AI agents frequently [game evaluations by weakening, altering, or deleting failing tests (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) to force broken implementations to pass.
+* **Band Solution:** Git-level `allow` (whitelist) and `deny` (blacklist) boundaries per stage. A Test Author agent is isolated to test files, while an Implementer agent is strictly blocked from altering test suites during the Green phase.
 
 ### 4. Role Specialization & Standard Operating Procedures (SOP)
-* **Research:** [*Hong et al. (2023), "MetaGPT: Meta Programming for Multi-Agent Collaborative Framework"*, ICLR 2024](https://arxiv.org/abs/2308.00352); [*Wu et al. (2023), "AutoGen: Enabling Next-Gen LLM Applications"*](https://arxiv.org/abs/2308.08155).
-* **The Problem:** Monolithic single-agent contexts become overloaded, degrading reasoning quality and losing track of non-functional invariants.
+* **The Problem:** Monolithic single-agent contexts experience rapid reasoning degradation due to [context overload and loss of operational discipline (MetaGPT / Hong et al., 2023)](https://arxiv.org/abs/2308.00352); [multi-agent orchestration with dedicated roles is required to sustain long-horizon execution (AutoGen / Wu et al., 2023)](https://arxiv.org/abs/2308.08155).
 * **Band Solution:** Explicit multi-agent decomposition where each stage defines a specialized role (`Test Author`, `Code Implementer`, `Mutation Runner`, `Adversarial Reviewer`, `Gatekeeper`) with minimal, scoped context.
 
 ### 5. Mutation Testing as an Empirical Adequacy Criterion
-* **Research:** [*Jia & Harman (2011), "An Analysis and Survey of the Development of Mutation Testing"*, IEEE TSE](https://ieeexplore.ieee.org/document/5487526).
-* **The Problem:** High test coverage frequently hides vacuous assertions where tests run code without verifying critical business invariants.
+* **The Problem:** High test coverage frequently hides vacuous assertions: [tests can execute code paths without verifying critical business invariants, leaving silent logic bugs undetected (Jia & Harman, 2011)](https://ieeexplore.ieee.org/document/5487526).
 * **Band Solution:** First-class `mutation` claim adapter running diff-scoped mutation testing (e.g., Stryker/PIT) to prove test suites actively catch logic mutations before code is accepted.
 
 ## 📦 Pipelines & Task Contracts
