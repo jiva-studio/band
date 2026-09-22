@@ -39,7 +39,6 @@ class CriticClaimTool(ClaimTool):
         claim_id = claim.get("id", "critic-review")
         checks = claim.get("checks", [])
         runner_type = claim.get("runner", "auto")
-        model = claim.get("model", "gemini-2.5-flash")
         timeout = claim.get("timeout", 45)
 
         task_dir = context.get("task_dir")
@@ -130,6 +129,7 @@ class CriticClaimTool(ClaimTool):
 
         runner_name, binary_path = cli_info
         checks_bullets = "\n".join([f"- {c}" for c in checks])
+        model = claim.get("model") or claim.get("params", {}).get("model")
 
         prompt = f"""# ROLE: Strict Code Reviewer & Critic
 You are evaluating a code change against the original intent and specific audit criteria.
@@ -169,10 +169,12 @@ or
 """
 
         try:
-            if runner_name == "gemini":
-                cmd = [binary_path, "-p", prompt, "-m", model]
-            else:
-                cmd = [binary_path, "-p", prompt, "--model", model]
+            cmd = [binary_path, "-p", prompt]
+            if model:
+                if runner_name == "gemini":
+                    cmd.extend(["-m", model])
+                else:
+                    cmd.extend(["--model", model])
 
             res = subprocess.run(
                 cmd,
