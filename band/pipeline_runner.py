@@ -208,6 +208,24 @@ class PipelineRunner:
         self.write_state(state)
         return next_stage
 
+    def pause_pipeline(self) -> Dict[str, Any]:
+        state = self.read_state()
+        if not state:
+            return {"status": "not_found", "message": "No active pipeline to pause."}
+        state["status"] = "paused"
+        state["updated_at"] = time.time()
+        self.write_state(state)
+        return {"status": "paused", "slug": state.get("slug")}
+
+    def resume_pipeline(self) -> Dict[str, Any]:
+        state = self.read_state()
+        if not state:
+            return {"status": "not_found", "message": "No pipeline state found to resume."}
+        state["status"] = "in_progress"
+        state["updated_at"] = time.time()
+        self.write_state(state)
+        return {"status": "in_progress", "slug": state.get("slug")}
+
     def evaluate_and_advance(self, is_hook: bool = True) -> Dict[str, Any]:
         """Unified FSM and Hook evaluation driven strictly by pipeline stage claims."""
         if not self.spec_path.exists():
@@ -219,10 +237,18 @@ class PipelineRunner:
         pipeline_cfg = load_pipeline_config(pipeline_name)
 
         if not state:
+            if is_hook:
+                # Do not auto-initialize or block during hook if pipeline was not explicitly started
+                return {"decision": "allow", "message": "Pipeline not initialized"}
             state = self.init_pipeline(pipeline_name)
 
-        if state.get("status") == "completed":
+        current_status = state.get("status", "idle")
+        if current_status == "completed":
             return {"decision": "allow", "message": f"Pipeline [{pipeline_name}] already completed"}
+        if current_status == "paused":
+            return {"decision": "allow", "message": f"Pipeline [{pipeline_name}] is paused"}
+        if current_status != "in_progress" and is_hook:
+            return {"decision": "allow", "message": f"Pipeline is in status '{current_status}', not active"}
 
         current_stage = self.get_current_stage(state, pipeline_cfg)
         if not current_stage:

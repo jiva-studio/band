@@ -46,9 +46,13 @@ class MutationClaimTool(ClaimTool):
         timeout = claim.get("timeout", 600)
         task_dir: Optional[Path] = context.get("task_dir")
 
-        script_path = REPO_ROOT / "scripts" / "vidya-mutation-suite-run"
-        if script_path.exists():
-            cmd = [str(script_path), str(mode), str(target)]
+        custom_cmd = claim.get("command") or claim.get("params", {}).get("cmd")
+        generic_script = REPO_ROOT / "scripts" / "mutation-suite-run"
+
+        if custom_cmd:
+            cmd = custom_cmd.split() if isinstance(custom_cmd, str) else custom_cmd
+        elif generic_script.exists():
+            cmd = [str(generic_script), str(mode), str(target)]
         else:
             # Generic fallback: make mutate-diff / mutate-full
             make_target = f"mutate-{mode}"

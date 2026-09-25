@@ -21,20 +21,23 @@ flowchart TD
     ValidateDone -->|Exit 0 (Valid)| Complete["6. Spec Locked! Ready for /band"]
 ```
 
-## Step 1: Locate Active Task and Validate Intent
+## Step 1: Initialize Worktree and Validate Intent
 
-1. Identify active task folder:
-   - If argument passed (e.g. `/spec .agents/tasks/feat-enroll`): use that directory.
-   - Otherwise, detect branch slug:
-     ```bash
-     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr "/" "-")
-     TASK_DIR=".agents/tasks/${BRANCH}"
-     ```
-2. Validate `.agents/tasks/<slug>/intent.md`:
-   - Run the deterministic validator:
-     ```bash
-     python3 -m band --validate-intent .agents/tasks/<slug>/intent.md
-     ```
+1. Identify `spec-slug` and `intent-slug`:
+   - E.g. `/spec auth-backend --intent auth-system` or `/spec feat-user-auth`
+2. Spin up an **isolated Git Worktree** for this spec:
+   ```bash
+   python3 -m band --worktree <spec-slug> --intent <intent-slug>
+   ```
+   This automatically:
+   - Creates a dedicated git branch `task/<spec-slug>`.
+   - Creates `.agents/worktrees/<spec-slug>` (ignored in main `.gitignore`).
+   - Copies `intent.md` and any untracked configs from `.worktreeinclude`.
+   - Runs `WorktreeCreate` hook if configured.
+3. Validate `.agents/tasks/<spec-slug>/intent.md`:
+   ```bash
+   python3 -m band --validate-intent .agents/tasks/<spec-slug>/intent.md
+   ```
    - If `intent.md` does not exist or fails validation (exit code != 0), STOP and instruct the user to run `/intent` first. Do NOT proceed to technical design on an invalid intent.
 
 ## Step 2: Codebase Reconnaissance (Anti-Hallucination Gate)

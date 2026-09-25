@@ -8,9 +8,14 @@ from typing import Any, Dict, List, Optional, Tuple
 PROTECTED_PATH_PATTERNS = [
     "*/artifacts/state.json",
     "artifacts/state.json",
-    "*.agents/tasks/*/artifacts/state.json",
-    "*.agents/pipelines/*",
-    "*.agents/band/*",
+    "*/.agents/tasks/*/artifacts/state.json",
+    "*/.agents/tasks/*/state.json",
+    ".agents/tasks/*/state.json",
+    ".agents/tasks/*/artifacts/state.json",
+    "*/.agents/pipelines/*",
+    ".agents/pipelines/*",
+    "*/.agents/band/*",
+    ".agents/band/*",
     "*pipelines/*.yaml",
     "*pipelines/*.yml",
 ]
@@ -36,7 +41,7 @@ def is_path_protected(path_str: str) -> bool:
     p = Path(normalized)
 
     # Check exact filename for state.json inside any artifacts/ folder
-    if p.name == "state.json":
+    if p.name == "state.json" and ("artifacts" in normalized or ".agents" in normalized or "tasks" in normalized):
         return True
 
     for pattern in PROTECTED_PATH_PATTERNS:
