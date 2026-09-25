@@ -102,10 +102,11 @@ def create_worktree(
     Returns (success, worktree_path, message).
     """
     ensure_worktrees_ignored(repo_root)
-    WORKTREES_BASE_DIR.mkdir(parents=True, exist_ok=True)
+    worktrees_base = repo_root / ".agents" / "worktrees"
+    worktrees_base.mkdir(parents=True, exist_ok=True)
 
     branch_name = f"task/{spec_slug}"
-    worktree_path = (WORKTREES_BASE_DIR / spec_slug).resolve()
+    worktree_path = (worktrees_base / spec_slug).resolve()
 
     # 1. Check if worktree directory already exists
     if worktree_path.exists():
@@ -176,7 +177,8 @@ def remove_worktree(
     repo_root: Path = REPO_ROOT
 ) -> Tuple[bool, str]:
     """Safely removes a worktree and optionally deletes its task branch."""
-    worktree_path = (WORKTREES_BASE_DIR / spec_slug).resolve()
+    worktrees_base = repo_root / ".agents" / "worktrees"
+    worktree_path = (worktrees_base / spec_slug).resolve()
     branch_name = f"task/{spec_slug}"
 
     if worktree_path.exists():
