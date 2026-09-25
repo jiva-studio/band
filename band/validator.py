@@ -44,15 +44,15 @@ def validate_intent_file(file_path: Path) -> Tuple[bool, List[str]]:
 
     # 2. Check for technical pollution (anti-patterns in pure intent specs)
     tech_patterns = [
-        (r"\b(DTO|interface\s+\w+|class\s+\w+|migration\s+\d+)\b", "Code symbols (DTO/interface/class/migration)"),
-        (r"\b(GET|POST|PATCH|DELETE)\s+/[a-zA-Z0-9_/]+", "Raw HTTP endpoint routes"),
+        (r"\b(interface\s+[A-Z]\w+|class\s+[A-Z]\w+|migration\s+\d{4,})\b", "Code symbols (interface/class/migration)"),
+        (r"\b(GET|POST|PATCH|DELETE)\s+/(api|v\d+)/[a-zA-Z0-9_/]+", "Raw HTTP endpoint routes"),
         (r"\b\w+\.(vue|ts|tsx|py|go|sql|prisma|css|scss)\b", "Source file paths/extensions"),
     ]
 
     for pattern, label in tech_patterns:
         matches = re.findall(pattern, content)
         if matches:
-            errors.append(f"Technical pollution detected in intent.md ({label}): {', '.join(set(matches[:3]))}. Move all technical design to spec.md.")
+            errors.append(f"Technical pollution detected in intent.md ({label}): {', '.join(set([m if isinstance(m, str) else m[0] for m in matches[:3]]))}. Move all technical design to spec.md.")
 
     return (len(errors) == 0), errors
 

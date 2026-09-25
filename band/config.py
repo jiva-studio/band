@@ -1,13 +1,33 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
+
+
+def _is_repo_root(path: Path) -> bool:
+    """Checks if a directory is a valid repository root (has .git or Makefile)."""
+    return path.is_dir() and ((path / ".git").exists() or (path / "Makefile").exists())
+
+
+def _find_source_in_dir(parent_dir: Path) -> Optional[Path]:
+    """Finds a child repository under a 'source/' directory."""
+    source_dir = parent_dir / "source"
+    if not source_dir.is_dir():
+        return None
+    for child in sorted(source_dir.iterdir()):
+        if _is_repo_root(child):
+            return child
+    return None
+
 
 def _find_repo_root() -> Path:
-    if "BAND_REPO_ROOT" in os.environ:
-        p = Path(os.environ["BAND_REPO_ROOT"]).resolve()
+    # 1. Explicit environment override
+    if env_root := os.getenv("BAND_REPO_ROOT"):
+        p = Path(env_root).resolve()
         if p.exists():
             return p
 
+    # 2. Git top level of current working directory
     try:
         res = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -16,31 +36,23 @@ def _find_repo_root() -> Path:
             text=True,
             check=True
         )
-        top = res.stdout.strip()
-        if top and Path(top).exists():
-            return Path(top)
+        if (top := Path(res.stdout.strip())).exists() and _is_repo_root(top):
+            return top
     except Exception:
         pass
 
-    # Check parent/sibling source directories (e.g. multi-repo layout where agent/ is sibling to source/<repo>)
-    cur = Path(__file__).resolve().parent
-    for base in [Path.cwd(), cur]:
-        for parent in [base] + list(base.parents):
-            source_dir = parent.parent / "source" if parent.name == "agent" else parent / "source"
-            if source_dir.exists() and source_dir.is_dir():
-                for child in source_dir.iterdir():
-                    if child.is_dir() and ((child / "Makefile").exists() or (child / ".git").exists()):
-                        if child.name == parent.parent.name or child.name == "vidya":
-                            return child
-                for child in source_dir.iterdir():
-                    if child.is_dir() and (child / "Makefile").exists():
-                        return child
-
-    for parent in [cur] + list(cur.parents):
-        if (parent / ".git").exists() or (parent / ".agents").exists() or (parent / "pipelines").exists():
-            return parent
+    # 3. Search upwards from cwd and module path for repo or multi-repo source layout
+    for start in [Path.cwd(), Path(__file__).resolve().parent]:
+        for current in [start, *start.parents]:
+            if _is_repo_root(current):
+                return current
+            if sibling_repo := _find_source_in_dir(current):
+                return sibling_repo
+            if sibling_repo := _find_source_in_dir(current.parent):
+                return sibling_repo
 
     return Path.cwd()
+
 
 def _find_tasks_dir(repo_root: Path) -> Path:
     if "BAND_TASKS_DIR" in os.environ:

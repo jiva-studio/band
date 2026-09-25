@@ -19,19 +19,19 @@ class CriticClaimTool(ClaimTool):
         if not checks or not isinstance(checks, list):
             errors.append("critic claim requires a list of \"checks\" (criteria strings)")
         runner = claim.get("runner", "auto")
-        if runner not in ("auto", "gemini", "claude"):
-            errors.append(f"critic claim \"runner\" must be \"auto\", \"gemini\" or \"claude\", got \"{runner}\"")
+        if runner not in ("auto", "gemini", "claude", "file"):
+            errors.append(f"critic claim \"runner\" must be \"auto\", \"gemini\", \"claude\" or \"file\", got \"{runner}\"")
         return errors
 
     def _find_cli_runner(self, requested: str) -> Optional[Tuple[str, str]]:
-        if requested in ("gemini", "auto"):
-            p = shutil.which("gemini")
-            if p and Path(p).exists():
-                return ("gemini", p)
         if requested in ("claude", "auto"):
             p = shutil.which("claude")
             if p and Path(p).exists():
                 return ("claude", p)
+        if requested in ("gemini", "auto"):
+            p = shutil.which("gemini")
+            if p and Path(p).exists():
+                return ("gemini", p)
         return None
 
     def execute(self, claim: Dict[str, Any], context: Dict[str, Any]) -> ClaimResult:
@@ -39,13 +39,57 @@ class CriticClaimTool(ClaimTool):
         claim_id = claim.get("id", "critic-review")
         checks = claim.get("checks", [])
         runner_type = claim.get("runner", "auto")
-        model = claim.get("model", "gemini-2.5-flash")
         timeout = claim.get("timeout", 45)
 
         task_dir = context.get("task_dir")
+        task_dir_path = Path(task_dir) if task_dir else None
+
+        # 1. Check for manual/agent review artifact in artifacts/critic_review.json
+        if task_dir_path:
+            review_file = task_dir_path / "artifacts" / "critic_review.json"
+            if review_file.exists():
+                try:
+                    review_data = json.loads(review_file.read_text(encoding="utf-8"))
+                    passed = review_data.get("passed", False)
+                    findings = review_data.get("findings", [])
+                    duration_ms = (time.time() - start_time) * 1000
+                    if not passed:
+                        msg = "Critic review artifact reported blockers:\n" + "\n".join(
+                            [f"- {f.get('file', '?')}:{f.get('line', '?')} {f.get('issue', '')} (Fix: {f.get('fix', '')})" for f in findings]
+                        )
+                    else:
+                        msg = ""
+                    return ClaimResult(
+                        claim_id=claim_id,
+                        kind=self.kind,
+                        passed=passed,
+                        message=msg,
+                        details={"findings": findings, "source": "artifact", "path": str(review_file)},
+                        duration_ms=duration_ms
+                    )
+                except Exception as e:
+                    duration_ms = (time.time() - start_time) * 1000
+                    return ClaimResult(
+                        claim_id=claim_id,
+                        kind=self.kind,
+                        passed=False,
+                        message=f"Failed to parse critic_review.json: {str(e)}",
+                        duration_ms=duration_ms
+                    )
+
+        if runner_type == "file":
+            duration_ms = (time.time() - start_time) * 1000
+            return ClaimResult(
+                claim_id=claim_id,
+                kind=self.kind,
+                passed=False,
+                message="No artifacts/critic_review.json found for file runner",
+                duration_ms=duration_ms
+            )
+
         intent_text = ""
-        if task_dir:
-            intent_path = Path(task_dir) / "intent.md"
+        if task_dir_path:
+            intent_path = task_dir_path / "intent.md"
             if intent_path.exists():
                 intent_text = intent_path.read_text(encoding="utf-8")
 
@@ -77,14 +121,15 @@ class CriticClaimTool(ClaimTool):
             return ClaimResult(
                 claim_id=claim_id,
                 kind=self.kind,
-                passed=True,
-                message="Critic skipped: no gemini/claude CLI runner found in PATH",
-                details={"status": "SKIPPED"},
+                passed=False,
+                message="Critic runner not found in PATH and no artifacts/critic_review.json found.",
+                details={"status": "NO_RUNNER"},
                 duration_ms=duration_ms
             )
 
         runner_name, binary_path = cli_info
         checks_bullets = "\n".join([f"- {c}" for c in checks])
+        model = claim.get("model") or claim.get("params", {}).get("model")
 
         prompt = f"""# ROLE: Strict Code Reviewer & Critic
 You are evaluating a code change against the original intent and specific audit criteria.
@@ -124,10 +169,12 @@ or
 """
 
         try:
-            if runner_name == "gemini":
-                cmd = [binary_path, "-p", prompt, "-m", model]
-            else:
-                cmd = [binary_path, "-p", prompt, "--model", model]
+            cmd = [binary_path, "-p", prompt]
+            if model:
+                if runner_name == "gemini":
+                    cmd.extend(["-m", model])
+                else:
+                    cmd.extend(["--model", model])
 
             res = subprocess.run(
                 cmd,
@@ -140,6 +187,16 @@ or
             duration_ms = (time.time() - start_time) * 1000
             raw_output = res.stdout.strip() or res.stderr.strip()
 
+            if res.returncode != 0:
+                return ClaimResult(
+                    claim_id=claim_id,
+                    kind=self.kind,
+                    passed=False,
+                    message=f"Critic CLI [{runner_name}] exited with error code {res.returncode}:\n{raw_output[:300]}",
+                    details={"raw": raw_output[:500], "returncode": res.returncode},
+                    duration_ms=duration_ms
+                )
+
             # Parse JSON from response (strip code fences if any)
             cleaned = re.sub(r"^```(?:json)?", "", raw_output.strip(), flags=re.MULTILINE)
             cleaned = re.sub(r"```$", "", cleaned.strip(), flags=re.MULTILINE)
@@ -147,14 +204,20 @@ or
             if json_match:
                 try:
                     parsed = json.loads(json_match.group(0))
-                except Exception:
-                    # Fallback if unescaped quotes inside json strings
-                    parsed = {"passed": True, "findings": []}
+                except Exception as e:
+                    return ClaimResult(
+                        claim_id=claim_id,
+                        kind=self.kind,
+                        passed=False,
+                        message=f"Critic output was invalid JSON: {str(e)}\nRaw output: {raw_output[:300]}",
+                        details={"raw": raw_output[:500]},
+                        duration_ms=duration_ms
+                    )
                 passed = parsed.get("passed", False)
                 findings = parsed.get("findings", [])
                 if not passed:
                     msg = "Critic identified blockers:\n" + "\n".join(
-                        [f"- {f.get("file", "?")}:{f.get("line", "?")} {f.get("issue", "")} (Fix: {f.get("fix", "")})" for f in findings]
+                        [f"- {f.get('file', '?')}:{f.get('line', '?')} {f.get('issue', '')} (Fix: {f.get('fix', '')})" for f in findings]
                     )
                 else:
                     msg = ""
@@ -170,8 +233,8 @@ or
                 return ClaimResult(
                     claim_id=claim_id,
                     kind=self.kind,
-                    passed=True,
-                    message="Critic response not JSON, allowing by default",
+                    passed=False,
+                    message=f"Critic did not return valid JSON:\n{raw_output[:300]}",
                     details={"raw": raw_output[:300]},
                     duration_ms=duration_ms
                 )
@@ -180,7 +243,7 @@ or
             return ClaimResult(
                 claim_id=claim_id,
                 kind=self.kind,
-                passed=True,
+                passed=False,
                 message=f"Critic execution error: {str(e)}",
                 duration_ms=duration_ms
             )

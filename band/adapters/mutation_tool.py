@@ -3,7 +3,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from band.ports.claim_tool import ClaimTool, ClaimResult
 from band.config import REPO_ROOT
 
@@ -21,7 +21,7 @@ class MutationClaimTool(ClaimTool):
 
     def execute(self, claim: Dict[str, Any], context: Dict[str, Any]) -> ClaimResult:
         start_time = time.time()
-        claim_id = claim.get("id", "mutation-check")
+        claim_id = claim.get("id", "mutation")
         target = (
             claim.get("package")
             or claim.get("target")
@@ -30,13 +30,29 @@ class MutationClaimTool(ClaimTool):
             or context.get("spec_data", {}).get("target")
             or "all"
         )
+
+        # If target was specified as directory path (e.g. modules/apps/admin), resolve to package name
+        if "/" in str(target) and target != "all":
+            pkg_json = (REPO_ROOT / target / "package.json") if not Path(target).is_absolute() else (Path(target) / "package.json")
+            if pkg_json.exists():
+                try:
+                    pdata = json.loads(pkg_json.read_text(encoding="utf-8"))
+                    if "name" in pdata:
+                        target = pdata["name"]
+                except Exception:
+                    pass
+
         mode = claim.get("mode") or claim.get("params", {}).get("mode", "diff")
         timeout = claim.get("timeout", 600)
         task_dir: Optional[Path] = context.get("task_dir")
 
-        script_path = REPO_ROOT / "scripts" / "vidya-mutation-suite-run"
-        if script_path.exists():
-            cmd = [str(script_path), str(mode), str(target)]
+        custom_cmd = claim.get("command") or claim.get("params", {}).get("cmd")
+        generic_script = REPO_ROOT / "scripts" / "mutation-suite-run"
+
+        if custom_cmd:
+            cmd = custom_cmd.split() if isinstance(custom_cmd, str) else custom_cmd
+        elif generic_script.exists():
+            cmd = [str(generic_script), str(mode), str(target)]
         else:
             # Generic fallback: make mutate-diff / mutate-full
             make_target = f"mutate-{mode}"

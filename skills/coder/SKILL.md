@@ -11,13 +11,13 @@ The implementation workflow for single-agent tasks and subagent implementation p
 
 Before writing any code or modifying any files, verify that the task specification and contract are locked:
 
-1. Locate `.agents/tasks/<slug>/band.yaml`.
+1. Locate `.agents/tasks/<slug>/done.yaml` (or `band.yaml`).
 2. Execute the validation gate:
    ```bash
-   python3 -m band --validate .agents/tasks/<slug>/band.yaml
+   python3 -m band --validate .agents/tasks/<slug>/done.yaml
    ```
 3. **HARD STOP RULE**:
-   - If `band.yaml` does not exist or fails validation: **DO NOT WRITE CODE**.
+   - If `done.yaml` / `band.yaml` does not exist or fails validation: **DO NOT WRITE CODE**.
    - Stop immediately and instruct the user to run `/intent` and `/spec` first.
    - Implementation is strictly forbidden without a validated contract.
 

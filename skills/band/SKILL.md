@@ -56,8 +56,26 @@ flowchart TD
 When working within the pipeline directed by the hook:
 - Follow the high-priority directive emitted by the hook for the active stage.
 - For subagent stages: spawn specialized subagents (`invoke_subagent`) matching the stage's `role` and context.
-- For tool verifications: let the hook and `.agents/scripts/done` run deterministic checks and leverage content-addressed caching.
 - Check current status anytime with:
   ```bash
   python3 -m band --status
   ```
+- If you need to pause verification to answer user questions or accept feedback:
+  ```bash
+  python3 -m band --pause
+  ```
+  Resume with: `python3 -m band --resume`
+
+---
+
+## 3. Merge & Cleanup Worktree
+When all pipeline stages pass (`status: "completed"`):
+1. Review final diff with user.
+2. Merge verified task branch into main:
+   ```bash
+   python3 -m band --merge <spec-slug>
+   ```
+3. Remove isolated worktree:
+   ```bash
+   python3 -m band --cleanup <spec-slug>
+   ```

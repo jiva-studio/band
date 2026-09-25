@@ -110,5 +110,5 @@ python3 -m band --validate-intent .agents/tasks/<slug>/intent.md
 - If the validator passes (exit code 0), the intent is locked and ready for `/spec`.
 
 ## Step 6: Hand Off to `/spec`
-Inform the user that the intent is validated and ready for technical specification:
-> *"Intent validated and locked in `.agents/tasks/<slug>/intent.md`. Run `/spec` to generate the technical architecture and `done.yaml`."*
+Inform the user that the intent is validated and ready for technical specification. Note that **one Intent can spawn multiple technical specs/tasks** (e.g. backend and frontend worktrees):
+> *"Intent validated and locked in `.agents/tasks/<slug>/intent.md`. Run `/spec <spec-slug>` to spin up an isolated Git Worktree and author the technical architecture."*
