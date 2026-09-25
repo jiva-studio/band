@@ -41,21 +41,6 @@ fi
 
 chmod -R u+rw "${AGENTS_DIR}"
 
-# Create ignore files for agents without active hooks support
-for ignore_file in "${TARGET_DIR}/.cursorignore" "${TARGET_DIR}/.rooignore" "${TARGET_DIR}/.clineignore" "${TARGET_DIR}/.aiderignore"; do
-  if [[ ! -f "${ignore_file}" ]] || ! grep -q "state.json" "${ignore_file}" 2>/dev/null; then
-    mkdir -p "$(dirname "${ignore_file}")"
-    cat <<'EOF' >> "${ignore_file}"
-# Band protected state, worktrees, and pipeline definitions
-**/.agents/worktrees/**
-**/.agents/tasks/*/state.json
-**/.agents/tasks/*/artifacts/**
-**/.agents/pipelines/**
-**/.agents/band/**
-EOF
-  fi
-done
-
 echo "✅ Band harness successfully installed at ${AGENTS_DIR}"
 echo ""
 echo "Security & Verification Gates Enabled:"
