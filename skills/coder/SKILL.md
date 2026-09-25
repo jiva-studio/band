@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Implementation agent for features, bug fixes and refactors. Reads task specifications, verifies that a valid band.yaml exists before starting, and finishes only when all deterministic quality gates pass.
+description: Implementation agent for features, bug fixes and refactors. Reads task specifications, verifies that a valid done.yaml exists before starting, and finishes only when all deterministic quality gates pass.
 ---
 
 # Coder Agent
@@ -50,6 +50,6 @@ Verify locally that all newly added behavior is covered by tests that fail if th
 When you finish implementation:
 1. Verify with the deterministic verification harness:
    ```bash
-   python3 -m band --spec .agents/tasks/<slug>/band.yaml
+   python3 -m band --spec .agents/tasks/<slug>/done.yaml
    ```
-2. The deterministic **Stop-Hook** will automatically verify all claims in `band.yaml` (compilation, unit tests, mutation score, critic checks). If any claim fails, review the exact error details and repair the implementation.
+2. The deterministic **Stop-Hook** will automatically verify all claims in `done.yaml` (compilation, unit tests, mutation score, critic checks). If any claim fails, review the exact error details and repair the implementation.

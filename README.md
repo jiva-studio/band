@@ -119,38 +119,45 @@ claims:
 ```
 
 ## 🚀 Quickstart
+ 
+ Install `Band` into the root of any repository:
+ 
+ ```bash
+ curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
+ ```
+ 
+ This installs the clean `.agents/` structure:
+ 
+ ```text
+ .agents/
+ ├── hooks.json             # Stop-hook and PreToolUse guard configuration
+ ├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
+ ├── band/                  # Python FSM verification engine & zero-dependency YAML loader
+-├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
++├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
+ └── tasks/                 # Task folders with intent.md, spec.md, done.yaml
+ ```
+ 
+ ## 💬 Developer Workflow
+ 
+ Developers trigger the workflow directly through chat slash commands:
+ 
+ ```text
++> /band-install                           # 0. Auto-configures Makefile, mutation testing & doctor
+ > /intent Add course cover image picker   # 1. Runs 5-lens interview & locks intent.md
+-> /spec                                   # 2. Explores codebase & generates done.yaml
++> /spec                                   # 2. Explores codebase, spins worktree & generates done.yaml
+ > /band                                   # 3. Runs autonomous multi-agent FSM pipeline
+ ```
+ 
++* **`/band-install`** — Inspects repository stack, generates tailored `Makefile` verification targets and mutation test configurations, and runs `band --doctor`.
+ * **`/intent <feature>`** — Conducts the 5-lens interview and produces `.agents/tasks/<slug>/intent.md`.
+-* **`/spec`** — Conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
++* **`/spec`** — Creates an isolated Git Worktree (`.agents/worktrees/<slug>`), conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
+ * **`/band`** — Spawns specialized subagents through the FSM pipeline under external Stop-hook supervision until 100% verified.
++* **`/coder`** — Implementation agent for single-agent tasks and subagent coding phases.
+ 
+ ## 📄 License
+ 
+ MIT © [Jiva Studio](https://github.com/jiva-studio)
 
-Install `Band` into the root of any repository:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
-```
-
-This installs the clean `.agents/` structure:
-
-```text
-.agents/
-├── hooks.json             # Stop-hook configuration
-├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
-├── band/                  # Python FSM verification engine & zero-dependency YAML loader
-├── skills/                # Agent skills (/band, /spec, /intent, /coder)
-└── tasks/                 # Task folders with intent.md, spec.md, done.yaml
-```
-
-## 💬 Developer Workflow
-
-Developers trigger the workflow directly through chat slash commands:
-
-```text
-> /intent Add course cover image picker   # 1. Runs 5-lens interview & locks intent.md
-> /spec                                   # 2. Explores codebase & generates done.yaml
-> /band                                   # 3. Runs autonomous multi-agent FSM pipeline
-```
-
-* **`/intent <feature>`** — Conducts the 5-lens interview and produces `.agents/tasks/<slug>/intent.md`.
-* **`/spec`** — Conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
-* **`/band`** — Spawns specialized subagents through the FSM pipeline under external Stop-hook supervision until 100% verified.
-
-## 📄 License
-
-MIT © [Jiva Studio](https://github.com/jiva-studio)
