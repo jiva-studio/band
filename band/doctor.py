@@ -15,7 +15,6 @@ def check_git_capability(repo_root: Path) -> Dict[str, Any]:
             return {"status": "FAIL", "message": "Git is not installed or not working.", "tip": "Install Git >= 2.20"}
 
         version_str = res.stdout.strip()
-        # Test worktree capability
         res_wt = subprocess.run(["git", "worktree", "list"], capture_output=True, text=True, cwd=repo_root)
         if res_wt.returncode == 0:
             return {"status": "OK", "message": f"{version_str} (Worktree enabled)"}
@@ -25,14 +24,14 @@ def check_git_capability(repo_root: Path) -> Dict[str, Any]:
         return {"status": "FAIL", "message": f"Git error: {str(e)}", "tip": "Install Git >= 2.20"}
 
 
-def check_makefile(repo_root: Path, stack: Dict[str, Any]) -> Dict[str, Any]:
-    """Checks Makefile targets for verification harness."""
+def check_makefile(repo_root: Path) -> Dict[str, Any]:
+    """Checks if repository provides declarative verification targets."""
     makefile = repo_root / "Makefile"
     if not makefile.exists():
         return {
             "status": "WARN",
             "message": "Makefile not found.",
-            "tip": "Run 'python3 -m band --init' to generate standard targets."
+            "tip": "Run /band-install to let the agent discover and configure verification targets for your project."
         }
 
     content = makefile.read_text(encoding="utf-8")
@@ -42,7 +41,7 @@ def check_makefile(repo_root: Path, stack: Dict[str, Any]) -> Dict[str, Any]:
 
     missing = []
     if not has_test:
-        missing.append("check-package")
+        missing.append("check-package (or test)")
     if not has_mutate:
         missing.append("mutate-diff")
     if not has_setup:
@@ -54,42 +53,26 @@ def check_makefile(repo_root: Path, stack: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "WARN",
             "message": f"Makefile missing targets: {', '.join(missing)}.",
-            "tip": "Run 'python3 -m band --init' to append standard verification targets."
+            "tip": "Run /band-install to configure project-specific targets."
         }
 
 
-def check_mutation_engine(repo_root: Path, stack: Dict[str, Any]) -> Dict[str, Any]:
-    """Checks mutation testing engine status and availability."""
-    lang = stack.get("language")
+def check_mutation_engine(repo_root: Path) -> Dict[str, Any]:
+    """Checks if mutation testing is configured or available."""
+    makefile = repo_root / "Makefile"
+    if makefile.exists() and "mutate-diff:" in makefile.read_text(encoding="utf-8"):
+        return {"status": "OK", "message": "Declarative mutate-diff target configured in Makefile."}
 
-    if lang in ("typescript", "javascript"):
-        if (repo_root / "stryker.config.json").exists() or (repo_root / "stryker.config.mjs").exists():
-            return {"status": "OK", "message": "Stryker Mutator configured (stryker.config.json)."}
-        if shutil.which("npx"):
-            return {
-                "status": "OK",
-                "message": "Zero-install on-demand Stryker available via 'npx @stryker-mutator/core'.",
-                "tip": "To install locally for faster runs: pnpm add -D @stryker-mutator/core"
-            }
-        return {"status": "WARN", "message": "No mutation tool configured.", "tip": "Install Stryker or run band --init"}
+    # Check common configuration files
+    if any((repo_root / name).exists() for name in ["stryker.config.json", "stryker.config.mjs", "stryker.config.js", "mutmut.ini", "mutants.toml"]):
+        return {"status": "OK", "message": "Mutation testing configuration file detected in repository."}
 
-    elif lang == "python":
-        if (repo_root / "mutmut.ini").exists() or (repo_root / "pyproject.toml").exists():
-            return {"status": "OK", "message": "Python mutation runner configured."}
-        if shutil.which("uvx"):
-            return {
-                "status": "OK",
-                "message": "Zero-install on-demand Mutmut available via 'uvx mutmut'.",
-                "tip": "To install locally: uv add --dev mutmut"
-            }
-        return {"status": "WARN", "message": "Python mutmut not configured.", "tip": "Run 'uv add --dev mutmut' or 'band --init'"}
-
-    elif lang == "rust":
-        if shutil.which("cargo-mutants"):
-            return {"status": "OK", "message": "cargo-mutants installed in PATH."}
-        return {"status": "INFO", "message": "cargo-mutants available via 'cargo install cargo-mutants'."}
-
-    return {"status": "INFO", "message": "Generic/Critic mutation analysis active."}
+    # Fallback to Critic review
+    return {
+        "status": "INFO",
+        "message": "No dedicated mutate-diff target configured (L3 Critic Agent will perform virtual mutant audits).",
+        "tip": "Run /band-install to configure native mutation testing for your stack."
+    }
 
 
 def check_hooks(repo_root: Path) -> Dict[str, Any]:
@@ -102,7 +85,7 @@ def check_hooks(repo_root: Path) -> Dict[str, Any]:
         return {
             "status": "WARN",
             "message": "Hooks configuration (.agents/hooks.json) not found.",
-            "tip": "Run 'python3 -m band --init' to register Stop and PreToolUse hooks."
+            "tip": "Run 'python3 -m band --init' or '/band-install' to register Stop and PreToolUse hooks."
         }
 
     try:
@@ -140,10 +123,10 @@ def run_doctor(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
         "git": check_git_capability(repo_root),
         "stack": {
             "status": "OK",
-            "message": f"Language: {stack['language'].capitalize()} | Package Manager: {stack['package_manager']} | Runner: {stack['test_runner']}"
+            "message": f"Detected Project Indicators: {stack['language'].capitalize()} | Manifests: {', '.join(stack['config_files']) or 'None'}"
         },
-        "makefile": check_makefile(repo_root, stack),
-        "mutation": check_mutation_engine(repo_root, stack),
+        "makefile": check_makefile(repo_root),
+        "mutation": check_mutation_engine(repo_root),
         "hooks": check_hooks(repo_root),
         "worktree": check_worktree_include(repo_root),
     }
@@ -182,6 +165,6 @@ def format_doctor_report(diag: Dict[str, Any]) -> str:
     if diag["ready"]:
         lines.append("🎉 Result: Environment is 100% READY for verified task execution!")
     else:
-        lines.append("⚠️ Result: Some components need configuration. Run 'python3 -m band --init' to configure.")
+        lines.append("⚠️ Result: Some components need configuration. Run '/band-install' to configure.")
 
     return "\n".join(lines)

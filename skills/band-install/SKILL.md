@@ -46,31 +46,39 @@ Before modifying any files, analyze the repository layout:
 
 ---
 
-## Step 2: Propose Configuration to User
+---
 
-Summarize findings and explain the verification capabilities:
-> *"I inspected your repository and detected **TypeScript + Vitest (pnpm)**.*
-> *I can configure your project with:*
-> 1. *Standard verification targets in `Makefile` (`check-package`, `mutate-diff`, `setup`)*
-> 2. *Fast diff-based mutation testing via Stryker (`stryker.config.json`)*
-> 3. *Worktree configuration (`.worktreeinclude`) to carry over local `.env` files*
-> 4. *Band deterministic verification gates in `.agents/hooks.json`"*
+## Step 2: Formulate & Propose Tailored Configuration Plan
+
+Do NOT rely on rigid assumptions. Reason about the actual build scripts and toolchains present in the repository (e.g. Turbo, Nx, Vitest, Jest, Pytest, Cargo, Go, Mix, Gradle, Deno, Bun).
+
+Formulate a concise plan for the user:
+> *"I analyzed your codebase and discovered your project setup:*
+> - *Primary Stack: [e.g. Next.js 14 / TypeScript with pnpm and Vitest]*
+> - *Existing Test Commands: [e.g. `pnpm test`]*
+> 
+> *Here is the tailored configuration I propose:*
+> 1. *Add standard declarative targets to `Makefile`:*
+>    - `check-package` -> runs the test suite for a package/target.
+>    - `mutate-diff` -> executes fast diff mutation testing on modified code.
+>    - `setup` -> installs or synchronizes project dependencies.
+> 2. *Configure diff-based mutation testing tailored for your test framework.*
+> 3. *Set up `.worktreeinclude` to carry over your local environment files.*
+> 4. *Register Band deterministic verification hooks in `.agents/hooks.json`.*
+> 
+> *Proceed with this configuration?"*
 
 ---
 
-## Step 3: Run Auto-Setup
+## Step 3: Scaffold & Configure Repository
 
-Execute the automated setup command:
-```bash
-python3 -m band --init
-```
-
-This will automatically:
-- Create or safely append verification targets to `Makefile`.
-- Generate minimal mutation configuration tailored for diff analysis.
-- Create `.worktreeinclude` with existing `.env` patterns.
-- Ensure `.agents/worktrees/` is in `.gitignore`.
-- Register `.agents/hooks.json`.
+1. Initialize base Band plumbing:
+   ```bash
+   python3 -m band --init
+   ```
+2. Tailor `Makefile` targets to match the project's real package manager, mono-repo layout, and test commands.
+3. If the project supports mutation testing (e.g. Stryker for JS/TS, mutmut for Python, cargo-mutants for Rust), configure a minimal configuration file or command.
+4. Ensure `.worktreeinclude` contains all local `.env*` or secret patterns.
 
 ---
 
