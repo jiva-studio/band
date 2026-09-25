@@ -106,6 +106,8 @@ def resolve_spec_path(arg_val: str) -> Optional[Path]:
 
 def main():
     parser = argparse.ArgumentParser(description="Band — Deterministic task completion harness and verification engine.")
+    parser.add_argument("--doctor", "-d", action="store_true", help="Run repository and environment health checks.")
+    parser.add_argument("--init", "--setup", action="store_true", help="Auto-configure Makefile targets, mutation testing, and .worktreeinclude for the project.")
     parser.add_argument("--validate", type=str, help="Validate a done.yaml / band.yaml manifest against schema.")
     parser.add_argument("--validate-intent", type=str, help="Validate an intent.md file for anti-pollution and structural completeness.")
     parser.add_argument("--validate-pipeline", type=str, help="Validate a pipeline.yaml file against schema.")
@@ -128,6 +130,26 @@ def main():
     # 0. PreToolUse Security Gate
     if args.guard:
         run_guard()
+
+    # 0.1 Doctor Diagnostic Mode
+    if args.doctor:
+        from band.doctor import run_doctor, format_doctor_report
+        diag = run_doctor(REPO_ROOT)
+        print(format_doctor_report(diag))
+        sys.exit(0 if diag["ready"] else 1)
+
+    # 0.2 Project Init & Auto-Setup Mode
+    if args.init:
+        from band.setup import setup_project
+        from band.doctor import run_doctor, format_doctor_report
+        res = setup_project(REPO_ROOT)
+        print(f"🚀 Band Auto-Setup Completed for [{res['stack']['language'].capitalize()}] project:")
+        for act in res["actions_taken"]:
+            print(f"  ✅ {act}")
+        print("\nRunning verification diagnostics...")
+        diag = run_doctor(REPO_ROOT)
+        print(format_doctor_report(diag))
+        sys.exit(0)
 
     # 1. Worktree Management Mode
     if args.worktree:
