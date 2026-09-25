@@ -20,7 +20,7 @@ class DoneEngine:
         if not self.spec_path.exists():
             return {
                 "passed": False,
-                "error": f"band.yaml not found at {self.spec_path}",
+                "error": f"Task specification not found at {self.spec_path}",
                 "results": [],
                 "hook_payload": json.dumps({"decision": "allow"}) if is_hook_mode else ""
             }
@@ -33,12 +33,12 @@ class DoneEngine:
                 "passed": False,
                 "error": f"Failed to parse YAML: {str(e)}",
                 "results": [],
-                "hook_payload": json.dumps({"decision": "continue", "reason": "Invalid band.yaml syntax"}) if is_hook_mode else ""
+                "hook_payload": json.dumps({"decision": "continue", "reason": "Invalid task specification YAML syntax"}) if is_hook_mode else ""
             }
 
         is_valid, errors = validate_done_manifest(data)
         if not is_valid:
-            err_msg = "band.yaml schema validation failed:\n" + "\n".join([f"- {e}" for e in errors])
+            err_msg = "Task specification schema validation failed:\n" + "\n".join([f"- {e}" for e in errors])
             return {
                 "passed": False,
                 "error": err_msg,

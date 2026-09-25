@@ -43,11 +43,13 @@ chmod -R u+rw "${AGENTS_DIR}"
 
 # Create ignore files for agents without active hooks support
 for ignore_file in "${TARGET_DIR}/.cursorignore" "${TARGET_DIR}/.rooignore" "${TARGET_DIR}/.clineignore" "${TARGET_DIR}/.aiderignore"; do
-  if [[ ! -f "${ignore_file}" ]] || ! grep -q "artifacts/state.json" "${ignore_file}" 2>/dev/null; then
+  if [[ ! -f "${ignore_file}" ]] || ! grep -q "state.json" "${ignore_file}" 2>/dev/null; then
     mkdir -p "$(dirname "${ignore_file}")"
     cat <<'EOF' >> "${ignore_file}"
-# Band protected state and pipeline definitions
-**/.agents/tasks/*/artifacts/state.json
+# Band protected state, worktrees, and pipeline definitions
+**/.agents/worktrees/**
+**/.agents/tasks/*/state.json
+**/.agents/tasks/*/artifacts/**
 **/.agents/pipelines/**
 **/.agents/band/**
 EOF
@@ -61,7 +63,7 @@ echo "  🛡️ PreToolUse Gate:  python3 -m band --guard (protects state.json &
 echo "  🛑 Stop Hook:        python3 -m band --hook  (validates stage claims & FSM)"
 echo ""
 echo "Next steps:"
-echo "  1. Review pipelines in .agents/pipelines/"
-echo "  2. Register .agents/hooks.json with your agent runner"
-echo "  3. Start a pipeline with: PYTHONPATH=.agents python3 -m band --start-pipeline .agents/tasks/<task-slug>/done.yaml"
+echo "  1. Run /band-install (or 'python3 -m band --init') to auto-configure Makefile and mutations"
+echo "  2. Run 'python3 -m band --doctor' to verify environment readiness"
+echo "  3. Start task intent with /intent <task-slug>"
 

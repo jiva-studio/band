@@ -31,7 +31,7 @@ flowchart TD
    ```bash
    python3 -m band --start-pipeline
    ```
-   This loads the configured pipeline profile (from `band.yaml` or `.agents/pipelines/`), creates `artifacts/state.json`, and outputs the initial stage directive.
+   This loads the configured pipeline profile (from `done.yaml` or `.agents/pipelines/`), creates `.agents/tasks/<slug>/state.json`, and outputs the initial stage directive.
 
 2. **External Hook Enforcement (`.agents/hooks.json`)**:
    Every time the agent completes an action or attempts to finish a turn, the harness hook executes:
@@ -47,7 +47,7 @@ flowchart TD
    - **Advances the FSM**: Updates `current_stage_idx` and provides the exact directive for the next subagent role.
 
 3. **Final Gatekeeper & Completion**:
-   When the final gatekeeper stage verifies all claims in `band.yaml`, the hook issues `{"decision": "allow"}` and marks the pipeline `status: "completed"`.
+   When the final gatekeeper stage verifies all claims in `done.yaml`, the hook issues `{"decision": "allow"}` and marks the pipeline `status: "completed"`.
 
 ---
 
