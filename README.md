@@ -29,7 +29,7 @@ Band structures autonomous software engineering into three strictly gated phases
 * **Problem Solved:** Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) by intercepting agent exits with a deterministic FSM and external Stop-hook.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
-* **Artifact & Gate:** Automated Multi-Agent Pipeline driven by `.claude/settings.json` (Claude Code) or `.agents/hooks.json`
+* **Artifact & Gate:** Automated Multi-Agent Pipeline driven by `.agents/settings.json` (Claude Code, via `.claude -> .agents`) or `.agents/hooks.json`
 
 ## ⚙️ How the FSM Engine Works
 
@@ -124,7 +124,7 @@ Install `Band` into the root of any repository:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
-sh .agents/bin/band --init      # wire hooks (Claude Code + other harnesses), link skills
+sh .agents/bin/band --init      # wire hooks, link .claude -> .agents
 sh .agents/bin/band --doctor    # verify interpreter, hooks, Makefile targets
 ```
 
@@ -133,10 +133,13 @@ This installs the clean `.agents/` structure:
 ```text
 .agents/
 ├── bin/band               # Launcher: sh .agents/bin/band <args> (works from any directory)
+├── settings.json          # Claude Code settings incl. Band hooks (seen as .claude/settings.json)
+├── .gitignore             # settings.local.json, worktrees/ (harness-local state)
 ├── hooks.json             # Stop-hook and PreToolUse guard configuration (non-Claude harnesses)
 ├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
 ├── band/                  # Python FSM verification engine & zero-dependency YAML loader
 ├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
+├── agents/                # Subagent definitions (optional)
 └── tasks/                 # Task folders with intent.md, spec.md, done.yaml
 ```
 
@@ -152,7 +155,13 @@ The launcher adds `.agents/` to `PYTHONPATH` and picks the interpreter in this o
 
 ### Claude Code integration
 
-`band --init` merges Band's hooks into `.claude/settings.json` (existing settings and hooks are preserved; re-running is idempotent) and symlinks the skills into `.claude/skills/`:
+`.agents/` is the **only** canonical agent directory. `band --init` makes `.claude` a symlink to it (`.claude -> .agents`), so Claude Code reads `.agents/settings.json`, `.agents/skills/`, `.agents/agents/` and `.agents/commands/` directly:
+
+* If `.claude` does not exist, the symlink is created.
+* If a real `.claude/` directory exists, its contents are migrated into `.agents/` first: `settings.json` is deep-merged (lists unioned), `skills/`, `agents/` and `commands/` entries and other files are moved. Existing `.agents` entries are never overwritten. Migration is all-or-nothing: on any conflict (same entry with different content, a differing scalar setting, invalid JSON) nothing is changed and `--init` reports `SKIPPED` with the reasons; `band --doctor` keeps warning until it is resolved.
+* `.agents/.gitignore` ignores harness-local state arriving through the link (`settings.local.json`, `worktrees/`).
+
+Band's hooks are merged into `.agents/settings.json` (existing settings and hooks are preserved; re-running is idempotent). The guard also protects this file (and `.claude/settings.json`, the same file) from agent edits; `~/.claude/settings.json` and `settings.local.json` are not affected:
 
 ```json
 {
