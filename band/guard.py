@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 PROTECTED_PATH_PATTERNS = [
     "*/artifacts/state.json",
@@ -44,6 +44,36 @@ DANGEROUS_COMMAND_PATTERNS = [
 # Keys under which harnesses pass the target file path of an edit tool.
 # Claude Code: Edit/Write/MultiEdit -> file_path, NotebookEdit -> notebook_path.
 PATH_ARG_KEYS = ["file_path", "notebook_path", "target_file", "TargetFile", "path", "file", "filename", "target"]
+
+# Tools that modify the file named by their path argument. Read-only tools (Read,
+# Grep, Glob) also carry path args and must not be checked against stage boundaries.
+EDIT_TOOL_NAMES = {"edit", "write", "multiedit", "notebookedit"}
+EDIT_TOOL_KEYWORDS = ("edit", "write", "replace", "create", "patch", "insert", "delete", "rename", "move")
+
+
+def is_edit_tool(tool_name: Any) -> bool:
+    if not isinstance(tool_name, str) or not tool_name:
+        return False
+    name = tool_name.lower()
+    return name in EDIT_TOOL_NAMES or any(kw in name for kw in EDIT_TOOL_KEYWORDS)
+
+
+def repo_relative_path(path_str: str, repo_root: Optional[str] = None, cwd: Optional[str] = None) -> Optional[str]:
+    """Maps an edit target to a repo-relative POSIX path; None if it lies outside the repository."""
+    if not path_str:
+        return None
+    if repo_root is None:
+        from band.config import REPO_ROOT
+        repo_root = str(REPO_ROOT)
+    root = Path(repo_root).resolve()
+    p = Path(path_str.replace("\\", "/")).expanduser()
+    if not p.is_absolute():
+        p = Path(cwd or os.getcwd()) / p
+    try:
+        return p.resolve().relative_to(root).as_posix()
+    except (OSError, ValueError):
+        return None
+
 
 # Keys under which harnesses pass a shell command. Claude Code: Bash -> command.
 COMMAND_ARG_KEYS = ["command", "CommandLine", "cmd", "script"]
@@ -109,13 +139,19 @@ def is_command_dangerous(command_str: str) -> Tuple[bool, str]:
     return False, ""
 
 
-def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
+def evaluate_tool_call(
+    payload: Dict[str, Any],
+    stage: Optional[Dict[str, Any]] = None,
+    repo_root: Optional[str] = None,
+) -> Tuple[bool, str]:
     """
     Evaluates an incoming PreToolUse hook payload.
 
     Accepts both Claude Code payloads ({"hook_event_name": "PreToolUse",
     "tool_name": "Edit", "tool_input": {"file_path": ...}}) and the legacy
     dialect ({"name"/"tool": ..., "args"/"arguments"/"params": {...}}).
+    When ``stage`` (the active pipeline stage) is given, edit tools are also
+    checked against its ``allow``/``deny`` file boundary.
     Returns (is_allowed, reason_if_denied).
     """
     if not isinstance(payload, dict):
@@ -134,6 +170,25 @@ def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
         ):
             return False, f"Direct editing of protected path '{target_path}' is forbidden. State transitions are managed exclusively by the Band harness."
 
+    # Check the active stage's allow/deny file boundary
+    tool_name = payload.get("tool_name") or payload.get("name") or payload.get("tool")
+    if stage and is_edit_tool(tool_name):
+        from band.pipeline_runner import stage_path_violation
+        for key in PATH_ARG_KEYS:
+            target_path = args.get(key)
+            if not isinstance(target_path, str):
+                continue
+            rel = repo_relative_path(target_path, repo_root, payload.get("cwd"))
+            if rel is None:
+                continue
+            violation = stage_path_violation(stage, rel)
+            if violation:
+                stage_id = stage.get("id", "stage")
+                return False, (
+                    f"Stage [{stage_id}] ({stage.get('role', stage_id)}) may not edit '{rel}': {violation}. "
+                    "Stay within this stage's file boundary."
+                )
+
     # Check command execution tools
     for key in COMMAND_ARG_KEYS:
         command_text = args.get(key)
@@ -145,13 +200,19 @@ def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
     return True, ""
 
 
-def run_guard(harness: str = "auto"):
+def run_guard(harness: str = "auto", stage_resolver: Optional[Callable[[], Optional[Dict[str, Any]]]] = None):
     """Entry point for PreToolUse hook runner (Claude Code or legacy dialect)."""
     from band.hook_io import read_stdin_payload, detect_harness, guard_response, emit
 
     payload = read_stdin_payload()
     resolved = detect_harness(payload, harness)
-    is_allowed, reason = evaluate_tool_call(payload)
+    stage = None
+    if stage_resolver is not None:
+        try:
+            stage = stage_resolver()
+        except Exception:
+            stage = None  # The Stop-hook boundary check still applies.
+    is_allowed, reason = evaluate_tool_call(payload, stage)
     emit(guard_response(is_allowed, reason, resolved))
 
 

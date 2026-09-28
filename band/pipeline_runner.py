@@ -11,6 +11,44 @@ from band.validator import TOOL_REGISTRY
 from band.cache import ClaimCache
 from band.engine import DoneEngine
 
+# Band's own control area. Stage `allow` lists describe the product files a stage
+# may touch; task specs/artifacts under these prefixes are never counted against them.
+BAND_CONTROL_PREFIXES = (".agents/", ".claude/")
+
+
+def stage_allow_patterns(stage: Dict[str, Any]) -> List[str]:
+    return list(stage.get("allow") or stage.get("allow_edits") or stage.get("include") or [])
+
+
+def stage_deny_patterns(stage: Dict[str, Any]) -> List[str]:
+    return list(stage.get("deny") or stage.get("deny_edits") or stage.get("forbid_edits") or stage.get("exclude") or [])
+
+
+def matches_any_pattern(file_path: str, patterns: List[str]) -> bool:
+    name = Path(file_path).name
+    for pattern in patterns:
+        if fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(name, pattern) or pattern in file_path:
+            return True
+        # "**/x" should also match "x" at the repository root.
+        if pattern.startswith("**/") and fnmatch.fnmatch(file_path, pattern[3:]):
+            return True
+    return False
+
+
+def stage_path_violation(stage: Dict[str, Any], file_path: str) -> Optional[str]:
+    """Returns a violation message if the stage may not modify file_path (repo-relative), else None."""
+    path = file_path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    deny_patterns = stage_deny_patterns(stage)
+    if deny_patterns and matches_any_pattern(path, deny_patterns):
+        return f"Denied modification: '{path}'"
+    allow_patterns = stage_allow_patterns(stage)
+    if allow_patterns and not path.startswith(BAND_CONTROL_PREFIXES) and not matches_any_pattern(path, allow_patterns):
+        return f"Disallowed modification (not in allow list {allow_patterns}): '{path}'"
+    return None
+
+
 class PipelineRunner:
     """Deterministic, Claims-Driven State-Machine Runner and Hook Controller."""
 
@@ -62,6 +100,8 @@ class PipelineRunner:
             "stages_completed": [],
             "stage_outputs": {},
             "claims": {},
+            # Files already dirty when the stage starts are not held against its allow/deny boundary.
+            "stage_baselines": {first_stage_id: self._get_changed_files()},
             "created_at": time.time(),
             "updated_at": time.time(),
         }
@@ -101,28 +141,17 @@ class PipelineRunner:
             return []
 
     def _matches_any_pattern(self, file_path: str, patterns: List[str]) -> bool:
-        for pattern in patterns:
-            if fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(Path(file_path).name, pattern) or pattern in file_path:
-                return True
-        return False
+        return matches_any_pattern(file_path, patterns)
 
     def _check_stage_file_boundaries(self, stage: Dict[str, Any], current_files: List[str], baseline_files: List[str]) -> List[str]:
         """Validates stage allow/deny file boundaries against newly modified files relative to baseline."""
-        newly_modified = [f for f in current_files if f not in baseline_files]
-        if not newly_modified:
-            return []
-
-        allow_patterns = stage.get("allow") or stage.get("allow_edits") or stage.get("include") or []
-        deny_patterns = stage.get("deny") or stage.get("deny_edits") or stage.get("forbid_edits") or stage.get("exclude") or []
-
         violations = []
-        for f in newly_modified:
-            if deny_patterns and self._matches_any_pattern(f, deny_patterns):
-                violations.append(f"Denied modification: '{f}'")
+        for f in current_files:
+            if f in baseline_files:
                 continue
-            if allow_patterns and not self._matches_any_pattern(f, allow_patterns):
-                violations.append(f"Disallowed modification (not in allow list): '{f}'")
-
+            violation = stage_path_violation(stage, f)
+            if violation:
+                violations.append(violation)
         return violations
 
     def _check_forbidden_edits(self, forbid_patterns: List[str], current_files: List[str], baseline_files: List[str]) -> List[str]:
@@ -191,6 +220,15 @@ class PipelineRunner:
                     err_messages.append(f"{claim_id}: {claim_res.message}")
 
         return all_passed, results, "\n".join(err_messages)
+
+    def active_stage(self) -> Optional[Dict[str, Any]]:
+        """The current stage of an in-progress pipeline, or None."""
+        state = self.read_state()
+        if not state or state.get("status") != "in_progress":
+            return None
+        manifest = load_yaml(self.spec_path) if self.spec_path.exists() else {}
+        pipeline_name = state.get("pipeline") or manifest.get("pipeline", "standard")
+        return self.get_current_stage(state, load_pipeline_config(pipeline_name))
 
     def advance_to_next_stage(self, state: Dict[str, Any], pipeline_cfg: Dict[str, Any], stage_id: str) -> Optional[Dict[str, Any]]:
         state["stages_completed"].append(stage_id)
@@ -275,13 +313,12 @@ class PipelineRunner:
         # 1. Boundary & forbidden file edits check
         changed_files = self._get_changed_files()
         baseline_files = state.get("stage_baselines", {}).get(stage_id, [])
-        forbid_patterns = current_stage.get("forbid_edits", [])
-        if forbid_patterns:
-            violations = self._check_forbidden_edits(forbid_patterns, changed_files, baseline_files)
+        if stage_allow_patterns(current_stage) or stage_deny_patterns(current_stage):
+            violations = self._check_stage_file_boundaries(current_stage, changed_files, baseline_files)
             if violations:
                 return {
                     "decision": "continue",
-                    "reason": f"⛔ Stage [{stage_id}] ({stage_role}) modified forbidden files:\n" + "\n".join([f"  - {v}" for v in violations])
+                    "reason": f"⛔ Stage [{stage_id}] ({stage_role}) modified files outside its allowed boundary:\n" + "\n".join([f"  - {v}" for v in violations])
                 }
 
         # 2. Evaluate stage claims

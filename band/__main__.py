@@ -91,6 +91,14 @@ def find_active_task_spec(is_hook_mode: bool = False) -> Optional[Path]:
     return None
 
 
+def _active_stage() -> Optional[dict]:
+    """The current stage of the active in-progress pipeline (for the PreToolUse guard)."""
+    spec_file = find_active_task_spec(is_hook_mode=True)
+    if not spec_file:
+        return None
+    return PipelineRunner(spec_file).active_stage()
+
+
 def resolve_spec_path(arg_val: str) -> Optional[Path]:
     p = Path(arg_val).resolve()
     if p.is_file():
@@ -136,7 +144,7 @@ def main():
 
     # 0. PreToolUse Security Gate
     if args.guard:
-        run_guard(args.harness)
+        run_guard(args.harness, stage_resolver=_active_stage)
 
     # 0.1 Doctor Diagnostic Mode
     if args.doctor:
