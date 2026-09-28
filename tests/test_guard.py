@@ -130,6 +130,23 @@ class TestBandGuard(unittest.TestCase):
         self.assertTrue(evaluate_tool_call({"raw": "not json"})[0])
         self.assertTrue(evaluate_tool_call({"tool_input": "string"})[0])
 
+    def test_project_settings_protected_but_not_global(self):
+        import os, tempfile
+        root = tempfile.mkdtemp(prefix="band_guard_")
+        os.makedirs(os.path.join(root, ".agents"))
+        os.symlink(".agents", os.path.join(root, ".claude"))
+        base = {"hook_event_name": "PreToolUse", "cwd": root, "tool_name": "Edit"}
+        for path in (".agents/settings.json", ".claude/settings.json", os.path.join(root, ".claude", "settings.json")):
+            allowed, _ = evaluate_tool_call(dict(base, tool_input={"file_path": path}))
+            self.assertFalse(allowed, path)
+        for path in (os.path.expanduser("~/.claude/settings.json"), ".claude/settings.local.json", "src/settings.json"):
+            allowed, _ = evaluate_tool_call(dict(base, tool_input={"file_path": path}))
+            self.assertTrue(allowed, path)
+        for cmd in ("echo '{}' > .claude/settings.json", "sed -i s/a/b/ .agents/settings.json", "rm -f ./.agents/settings.json"):
+            self.assertTrue(is_command_dangerous(cmd)[0], cmd)
+        for cmd in ("cat .claude/settings.json", "echo x > ~/.claude/settings.json.bak", "jq . .agents/settings.json"):
+            self.assertFalse(is_command_dangerous(cmd)[0], cmd)
+
     def test_harness_detection(self):
         self.assertEqual(detect_harness({"hook_event_name": "PreToolUse"}), "claude-code")
         self.assertEqual(detect_harness({"tool_name": "write_to_file"}), "legacy")

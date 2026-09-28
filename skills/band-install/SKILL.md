@@ -64,7 +64,7 @@ Formulate a concise plan for the user:
 >    - `setup` -> installs or synchronizes project dependencies.
 > 2. *Configure diff-based mutation testing tailored for your test framework.*
 > 3. *Set up `.worktreeinclude` to carry over your local environment files.*
-> 4. *Register Band deterministic verification hooks in `.claude/settings.json` (Claude Code) and `.agents/hooks.json` (other harnesses).*
+> 4. *Register Band deterministic verification hooks in `.agents/settings.json` (Claude Code, via the `.claude -> .agents` symlink) and `.agents/hooks.json` (other harnesses).*
 > 
 > *Proceed with this configuration?"*
 
@@ -96,7 +96,8 @@ Confirm all checks pass:
 - ✅ Mutation Engine
 - ✅ Interpreter & launcher (`.agents/bin/band`)
 - ✅ Security Guard & Hooks (`.agents/hooks.json`)
-- ✅ Claude Code hooks (`.claude/settings.json`)
+- ✅ `.claude` is a symlink to `.agents`
+- ✅ Claude Code hooks (`.agents/settings.json`)
 
 ---
 

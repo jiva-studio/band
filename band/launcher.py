@@ -21,7 +21,7 @@ LAUNCHER_REL_PATH = ".agents/bin/band"
 # Command used in docs, skills and interactive shells (run from the repo root).
 BAND_CMD = "sh .agents/bin/band"
 
-# Commands for Claude Code (.claude/settings.json). Claude Code exports
+# Commands for Claude Code (.agents/settings.json, seen as .claude/settings.json via the symlink). Claude Code exports
 # CLAUDE_PROJECT_DIR to hook processes, so the hook works from any cwd.
 CLAUDE_GUARD_COMMAND = 'sh "${CLAUDE_PROJECT_DIR}/.agents/bin/band" --guard --harness claude-code'
 CLAUDE_STOP_COMMAND = 'sh "${CLAUDE_PROJECT_DIR}/.agents/bin/band" --hook --harness claude-code'

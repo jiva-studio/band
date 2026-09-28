@@ -20,8 +20,8 @@ STDIN_INSTRUCTION = (
 )
 
 
-# Band's own harness files and task bookkeeping (.agents/) are not part of the reviewed change.
-DIFF_PATHSPEC = [".", ":(exclude).agents"]
+# Band's harness files and task bookkeeping (.agents/, and its .claude symlink) are not part of the reviewed change.
+DIFF_PATHSPEC = [".", ":(exclude).agents", ":(exclude).claude"]
 
 
 def _git(args: List[str], cwd: Path, timeout: int = 30) -> Tuple[int, str, str]:

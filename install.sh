@@ -54,7 +54,7 @@ echo "  🛑 Stop Hook:        sh .agents/bin/band --hook  (validates stage clai
 echo ""
 echo "Next steps:"
 echo "  1. Run 'sh .agents/bin/band --init' (or /band-install) to wire hooks into .agents/hooks.json"
-echo "     and .claude/settings.json (Claude Code), and link skills into .claude/skills/"
+echo "     and .agents/settings.json, and link .claude -> .agents for Claude Code"
 echo "  2. Run 'sh .agents/bin/band --doctor' to verify environment readiness"
 echo "  3. Start task intent with /intent <task-slug>"
 

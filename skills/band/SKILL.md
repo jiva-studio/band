@@ -11,7 +11,7 @@ The `/band` skill is a **deterministic, hook-driven workflow orchestrator**. Rat
 flowchart TD
     Trigger["User: /band"] --> InitFSM["1. Initialize Pipeline FSM\n(sh .agents/bin/band --start-pipeline)"]
     
-    InitFSM --> HookLoop["2. External Hook Loop (.claude/settings.json or .agents/hooks.json)\n- Hook intercepts turn completion / stop attempts\n- Evaluates active stage condition in pipeline.yaml\n- Runs verification tools & diff mutation analysis\n- Injects next stage directive or blocks completion"]
+    InitFSM --> HookLoop["2. External Hook Loop (.agents/settings.json via .claude symlink, or .agents/hooks.json)\n- Hook intercepts turn completion / stop attempts\n- Evaluates active stage condition in pipeline.yaml\n- Runs verification tools & diff mutation analysis\n- Injects next stage directive or blocks completion"]
     
     HookLoop --> StageAgent["Agent / Subagent Action\n- Executes current stage role (Author / Implementer / Reviewer)\n- Enforces forbidden edits & boundaries"]
     
@@ -33,7 +33,7 @@ flowchart TD
    ```
    This loads the configured pipeline profile (from `done.yaml` or `.agents/pipelines/`), creates `.agents/tasks/<slug>/state.json`, and outputs the initial stage directive.
 
-2. **External Hook Enforcement (`.claude/settings.json` for Claude Code, `.agents/hooks.json` for other harnesses)**:
+2. **External Hook Enforcement (`.agents/settings.json` for Claude Code via the `.claude -> .agents` symlink, `.agents/hooks.json` for other harnesses)**:
    Every time the agent completes an action or attempts to finish a turn, the harness hook executes:
    ```bash
    sh .agents/bin/band --hook

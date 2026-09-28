@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 from band.config import REPO_ROOT
+from band.claude_link import ensure_agents_gitignore, ensure_claude_link
 from band.launcher import (
     CLAUDE_GUARD_COMMAND,
     CLAUDE_GUARD_MATCHER,
@@ -144,53 +145,36 @@ def claude_settings_has_band_hooks(settings: Dict[str, Any]) -> Dict[str, bool]:
 
 
 def write_claude_settings(repo_root: Path) -> str:
-    """Merges Band hooks into <repo>/.claude/settings.json. Returns an action message."""
-    settings_file = repo_root / ".claude" / "settings.json"
+    """
+    Merges Band hooks into <repo>/.agents/settings.json, the canonical Claude Code
+    settings file (Claude Code reads it as .claude/settings.json via the
+    .claude -> .agents symlink). Returns an action message.
+    """
+    settings_file = repo_root / ".agents" / "settings.json"
     existing: Dict[str, Any] = {}
     if settings_file.exists():
         try:
             existing = json.loads(settings_file.read_text(encoding="utf-8") or "{}")
         except json.JSONDecodeError as e:
-            return f"SKIPPED .claude/settings.json: existing file is not valid JSON ({e}); fix it and re-run --init"
+            return f"SKIPPED .agents/settings.json: existing file is not valid JSON ({e}); fix it and re-run --init"
         if not isinstance(existing, dict):
-            return "SKIPPED .claude/settings.json: existing file is not a JSON object"
+            return "SKIPPED .agents/settings.json: existing file is not a JSON object"
 
     merged = merge_claude_settings(existing)
     if settings_file.exists() and merged == existing:
         return ""
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
-    return ("Updated" if existing else "Created") + " Claude Code hooks in .claude/settings.json"
-
-
-def link_claude_skills(repo_root: Path) -> List[str]:
-    """
-    Makes Band's skills (.agents/skills/<name>) discoverable by Claude Code by
-    symlinking them into .claude/skills/<name>. Existing entries are left alone.
-    """
-    src_root = repo_root / ".agents" / "skills"
-    if not src_root.is_dir():
-        return []
-    dest_root = repo_root / ".claude" / "skills"
-    actions: List[str] = []
-    for skill_dir in sorted(p for p in src_root.iterdir() if (p / "SKILL.md").is_file()):
-        dest = dest_root / skill_dir.name
-        if dest.exists() or dest.is_symlink():
-            continue
-        dest_root.mkdir(parents=True, exist_ok=True)
-        try:
-            dest.symlink_to(Path("..") / ".." / ".agents" / "skills" / skill_dir.name, target_is_directory=True)
-            actions.append(f"Linked skill .claude/skills/{skill_dir.name} -> .agents/skills/{skill_dir.name}")
-        except OSError as e:
-            actions.append(f"SKIPPED linking skill {skill_dir.name}: {e}")
-    return actions
+    return ("Updated" if existing else "Created") + " Claude Code hooks in .agents/settings.json"
 
 
 def setup_project(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
     """
     Initializes standard Band plumbing: the .agents/bin/band launcher,
-    .agents/hooks.json (other harnesses), Claude Code hooks merged into
-    .claude/settings.json, .worktreeinclude and the .gitignore entry.
+    .agents/hooks.json (other harnesses), the .claude -> .agents symlink
+    (migrating a real .claude/ first), Claude Code hooks merged into
+    .agents/settings.json, .agents/.gitignore, .worktreeinclude and the
+    root .gitignore entry.
     """
     stack = detect_project_stack(repo_root)
     actions_taken: List[str] = []
@@ -223,11 +207,13 @@ def setup_project(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # 1b. Claude Code hooks (.claude/settings.json), merged without clobbering
+    # 1b. .agents is canonical: link .claude -> .agents (migrate a real .claude/ first),
+    #     then merge Band's Claude Code hooks into .agents/settings.json.
+    actions_taken.extend(ensure_claude_link(repo_root))
     msg = write_claude_settings(repo_root)
     if msg:
         actions_taken.append(msg)
-    actions_taken.extend(link_claude_skills(repo_root))
+    actions_taken.extend(ensure_agents_gitignore(repo_root))
 
     # 2. Setup .worktreeinclude
     wt_inc = repo_root / ".worktreeinclude"

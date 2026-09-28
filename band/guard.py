@@ -1,5 +1,6 @@
 import fnmatch
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -22,6 +23,9 @@ PROTECTED_PATH_PATTERNS = [
     "*pipelines/*.yml",
 ]
 
+_REL_SETTINGS = r"""(?:^|[\s'"=>])(?:\./)?\.(?:agents|claude)/settings\.json"""
+PROJECT_SETTINGS_RE = r"(?:(?:>|>>)\s*|(?:sed|perl)\s+.*-i.*|(?:rm|mv|ln|truncate)\s+.*)" + _REL_SETTINGS
+
 DANGEROUS_COMMAND_PATTERNS = [
     r"(>|>>)\s*.*state\.json",
     r"sed\s+.*-i.*state\.json",
@@ -32,6 +36,9 @@ DANGEROUS_COMMAND_PATTERNS = [
     r"(>|>>)\s*.*\.agents/pipelines",
     r"(>|>>)\s*.*\.agents/band",
     r"(>|>>)\s*.*\.agents/bin",
+    # Project Claude Code settings (Band's hooks). Relative forms only, so the
+    # user's global ~/.claude/settings.json is not affected.
+    PROJECT_SETTINGS_RE,
 ]
 
 # Keys under which harnesses pass the target file path of an edit tool.
@@ -61,6 +68,28 @@ def is_path_protected(path_str: str) -> bool:
             return True
 
     return False
+
+
+def is_project_settings(path_str: str, project_root: Optional[str] = None) -> bool:
+    """
+    True if path_str is the project's Claude Code settings file carrying Band's hooks:
+    <project>/.agents/settings.json, also reached as <project>/.claude/settings.json
+    through the .claude -> .agents symlink. The user's ~/.claude/settings.json and
+    settings.local.json are not protected.
+    """
+    if not path_str:
+        return False
+    root = Path(project_root or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    p = Path(path_str.replace("\\", "/")).expanduser()
+    if not p.is_absolute():
+        p = root / p
+    try:
+        resolved = p.resolve()
+        root_resolved = root.resolve()
+    except OSError:
+        return False
+    targets = {(root_resolved / ".agents" / "settings.json"), (root_resolved / ".claude" / "settings.json")}
+    return resolved in targets
 
 
 def is_command_dangerous(command_str: str) -> Tuple[bool, str]:
@@ -100,7 +129,9 @@ def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
     # Check file editing tools
     for key in PATH_ARG_KEYS:
         target_path = args.get(key)
-        if isinstance(target_path, str) and is_path_protected(target_path):
+        if isinstance(target_path, str) and (
+            is_path_protected(target_path) or is_project_settings(target_path, payload.get("cwd"))
+        ):
             return False, f"Direct editing of protected path '{target_path}' is forbidden. State transitions are managed exclusively by the Band harness."
 
     # Check command execution tools

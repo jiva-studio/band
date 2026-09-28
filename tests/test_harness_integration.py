@@ -131,10 +131,14 @@ class TestBandHarnessIntegration(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(res.stdout.strip(), "")
 
-    def test_init_writes_claude_settings_and_links_skills(self):
+    def test_init_links_claude_to_agents(self):
         res = self._run_band(["--init"])
         self.assertEqual(res.returncode, 0, res.stderr)
-        settings = json.loads((Path(self.test_dir) / ".claude" / "settings.json").read_text())
+        claude = Path(self.test_dir) / ".claude"
+        self.assertTrue(claude.is_symlink())
+        self.assertEqual(os.readlink(claude), ".agents")
+        self.assertIn("CLAUDE_LINK: .claude -> .agents", res.stdout)
+        settings = json.loads((claude / "settings.json").read_text())
         self.assertIn("--guard --harness claude-code", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
         self.assertIn("--hook --harness claude-code", settings["hooks"]["Stop"][0]["hooks"][0]["command"])
         self.assertTrue((Path(self.test_dir) / ".claude" / "skills" / "band" / "SKILL.md").exists())

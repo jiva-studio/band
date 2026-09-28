@@ -129,7 +129,7 @@ def main():
         "--harness",
         choices=HARNESS_CHOICES,
         default=HARNESS_AUTO,
-        help="Hook I/O dialect for --guard/--hook: claude-code (.claude/settings.json), legacy (.agents/hooks.json) or auto-detect.",
+        help="Hook I/O dialect for --guard/--hook: claude-code (.agents/settings.json via .claude symlink), legacy (.agents/hooks.json) or auto-detect.",
     )
 
     args = parser.parse_args()

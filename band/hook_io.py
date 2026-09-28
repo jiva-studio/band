@@ -2,7 +2,7 @@
 
 Two harness dialects are supported:
 
-* ``claude-code`` - Claude Code hooks (``.claude/settings.json``). The event
+* ``claude-code`` - Claude Code hooks (``.agents/settings.json``, read through ``.claude -> .agents``). The event
   arrives as JSON on stdin (``hook_event_name``, ``tool_name``,
   ``tool_input``...). Blocking is signalled with exit code 2 plus the reason
   on stderr, which every Claude Code version honours for PreToolUse and Stop;
