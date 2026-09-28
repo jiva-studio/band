@@ -17,19 +17,19 @@ Band structures autonomous software engineering into three strictly gated phases
 * **Problem Solved:** Prevents [context pollution and goal drift (Anthropic Research, 2024)](https://www.anthropic.com/research/building-effective-agents) where AI models jump into premature code assumptions before understanding the business domain.
 * **5-Lens Interview:** Clarifies JTBD, Adversarial edge cases, Non-Goals, Pre-Mortem failure modes, and Business Invariants.
 * **Anti-Pollution Rule:** Strictly forbids technical design, file paths, or code snippets in the intent document.
-* **Artifact & Gate:** `.agents/tasks/<slug>/intent.md` verified via `python3 -m band --validate-intent`
+* **Artifact & Gate:** `.agents/tasks/<slug>/intent.md` verified via `sh .agents/bin/band --validate-intent`
 
 ### 📐 2. Technical Specification (`/spec`)
 * **Problem Solved:** Prevents [hallucinatory API design and blast-radius regressions (SWE-bench / Jimenez et al., 2024)](https://arxiv.org/abs/2310.06770) by requiring codebase reconnaissance before coding.
 * **Blast Radius Matrix:** Explicitly maps affected packages, modified files, and downstream consumers.
 * **Contract Generation:** Creates `.agents/tasks/<slug>/done.yaml` with declarative verification claims.
-* **Artifact & Gate:** `.agents/tasks/<slug>/done.yaml` verified via `python3 -m band --validate`
+* **Artifact & Gate:** `.agents/tasks/<slug>/done.yaml` verified via `sh .agents/bin/band --validate`
 
 ### 🥁 3. Autonomous Orchestration (`/band`)
 * **Problem Solved:** Eliminates [premature task completion and self-correction failure (Huang et al., 2023)](https://arxiv.org/abs/2310.01798) by intercepting agent exits with a deterministic FSM and external Stop-hook.
 * **Stage Boundaries:** Enforces `allow` (whitelist) and `deny` (blacklist) file boundaries per stage at the Git level.
 * **Stop-Hook Interception:** Intercepts agent exit attempts, verifies claims with real compilers and test runners, and feeds back failure traces.
-* **Artifact & Gate:** Automated Multi-Agent Pipeline driven by `.agents/hooks.json`
+* **Artifact & Gate:** Automated Multi-Agent Pipeline driven by `.claude/settings.json` (Claude Code) or `.agents/hooks.json`
 
 ## ⚙️ How the FSM Engine Works
 
@@ -119,45 +119,84 @@ claims:
 ```
 
 ## 🚀 Quickstart
- 
- Install `Band` into the root of any repository:
- 
- ```bash
- curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
- ```
- 
- This installs the clean `.agents/` structure:
- 
- ```text
- .agents/
- ├── hooks.json             # Stop-hook and PreToolUse guard configuration
- ├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
- ├── band/                  # Python FSM verification engine & zero-dependency YAML loader
--├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
-+├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
- └── tasks/                 # Task folders with intent.md, spec.md, done.yaml
- ```
- 
- ## 💬 Developer Workflow
- 
- Developers trigger the workflow directly through chat slash commands:
- 
- ```text
-+> /band-install                           # 0. Auto-configures Makefile, mutation testing & doctor
- > /intent Add course cover image picker   # 1. Runs 5-lens interview & locks intent.md
--> /spec                                   # 2. Explores codebase & generates done.yaml
-+> /spec                                   # 2. Explores codebase, spins worktree & generates done.yaml
- > /band                                   # 3. Runs autonomous multi-agent FSM pipeline
- ```
- 
-+* **`/band-install`** — Inspects repository stack, generates tailored `Makefile` verification targets and mutation test configurations, and runs `band --doctor`.
- * **`/intent <feature>`** — Conducts the 5-lens interview and produces `.agents/tasks/<slug>/intent.md`.
--* **`/spec`** — Conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
-+* **`/spec`** — Creates an isolated Git Worktree (`.agents/worktrees/<slug>`), conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
- * **`/band`** — Spawns specialized subagents through the FSM pipeline under external Stop-hook supervision until 100% verified.
-+* **`/coder`** — Implementation agent for single-agent tasks and subagent coding phases.
- 
- ## 📄 License
- 
- MIT © [Jiva Studio](https://github.com/jiva-studio)
 
+Install `Band` into the root of any repository:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiva-studio/band/main/install.sh | bash
+sh .agents/bin/band --init      # wire hooks (Claude Code + other harnesses), link skills
+sh .agents/bin/band --doctor    # verify interpreter, hooks, Makefile targets
+```
+
+This installs the clean `.agents/` structure:
+
+```text
+.agents/
+├── bin/band               # Launcher: sh .agents/bin/band <args> (works from any directory)
+├── hooks.json             # Stop-hook and PreToolUse guard configuration (non-Claude harnesses)
+├── pipelines/             # Declarative pipeline definitions (standard, hardened, fast, docs)
+├── band/                  # Python FSM verification engine & zero-dependency YAML loader
+├── skills/                # Agent skills (/band-install, /intent, /spec, /band, /coder)
+└── tasks/                 # Task folders with intent.md, spec.md, done.yaml
+```
+
+### Running Band
+
+Always invoke Band through the launcher, never with a bare `python3 -m band` (the package lives in `.agents/`, so it is not importable from the repository root):
+
+```bash
+sh .agents/bin/band --status
+```
+
+The launcher adds `.agents/` to `PYTHONPATH` and picks the interpreter in this order: `$BAND_PYTHON` (may contain arguments, e.g. `BAND_PYTHON="uv run --no-project python"`), `python3`, `python` (>= 3.8), then `uv run --no-project python`. This makes it work on hosts such as NixOS where `python3` is not on `PATH` but `uv` is.
+
+### Claude Code integration
+
+`band --init` merges Band's hooks into `.claude/settings.json` (existing settings and hooks are preserved; re-running is idempotent) and symlinks the skills into `.claude/skills/`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [{ "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.agents/bin/band\" --guard --harness claude-code", "timeout": 30 }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.agents/bin/band\" --hook --harness claude-code", "timeout": 600 }]
+      }
+    ]
+  }
+}
+```
+
+* **PreToolUse guard** reads Claude Code's stdin payload (`tool_name`, `tool_input.file_path` / `notebook_path` / `command`). A protected write is denied with exit code 2 and `hookSpecificOutput.permissionDecision: "deny"`; allowed calls exit 0 silently, so Claude Code's own permission prompts still apply.
+* **Stop hook** blocks with exit code 2 (reason on stderr, plus `hookSpecificOutput` `{"hookEventName": "Stop", "decision": "continue", "reason": ...}` on stdout) while stage claims fail, and exits 0 when the pipeline passes, is paused, or no task is active. An internal Band error never traps the agent: the stop is allowed and a `systemMessage` is shown.
+* `.agents/hooks.json` keeps the original dialect (`{"decision": "allow" | "deny" | "continue"}`) for other harnesses; `--harness auto` (the default) detects Claude Code payloads by `hook_event_name`.
+
+### Critic claim limits
+
+The `critic` claim reviews the complete task diff — committed, uncommitted and untracked changes against the merge-base of the task's base branch (claim `base` > `done.yaml` `base_branch` > `$BAND_BASE_BRANCH` > `origin/HEAD` > `main` > `master`). It never reviews truncated input: if the diff exceeds `max_diff_chars` (default 200000) or `intent.md` exceeds `max_intent_chars` (default 50000), the claim fails with an explicit message. The CLI timeout defaults to 300 s (`timeout` on the claim or `BAND_CRITIC_TIMEOUT`).
+
+## 💬 Developer Workflow
+
+Developers trigger the workflow directly through chat slash commands:
+
+```text
+> /band-install                           # 0. Auto-configures Makefile, mutation testing & doctor
+> /intent Add course cover image picker   # 1. Runs 5-lens interview & locks intent.md
+> /spec                                   # 2. Explores codebase, spins worktree & generates done.yaml
+> /band                                   # 3. Runs autonomous multi-agent FSM pipeline
+```
+
+* **`/band-install`** — Inspects repository stack, generates tailored `Makefile` verification targets and mutation test configurations, and runs `band --doctor`.
+* **`/intent <feature>`** — Conducts the 5-lens interview and produces `.agents/tasks/<slug>/intent.md`.
+* **`/spec`** — Creates an isolated Git Worktree (`.agents/worktrees/<slug>`), conducts codebase reconnaissance, maps blast radius, and generates a validated `done.yaml`.
+* **`/band`** — Spawns specialized subagents through the FSM pipeline under external Stop-hook supervision until 100% verified.
+* **`/coder`** — Implementation agent for single-agent tasks and subagent coding phases.
+
+## 📄 License
+
+MIT © [Jiva Studio](https://github.com/jiva-studio)
