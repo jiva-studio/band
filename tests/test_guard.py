@@ -1,6 +1,7 @@
 import json
 import unittest
 from band.guard import is_path_protected, is_command_dangerous, evaluate_tool_call
+from band.hook_io import detect_harness, guard_response, stop_response
 
 
 class TestBandGuard(unittest.TestCase):
@@ -92,6 +93,85 @@ class TestBandGuard(unittest.TestCase):
             }
         })
         self.assertTrue(allowed)
+
+
+    def test_claude_code_payloads(self):
+        base = {"session_id": "s", "cwd": "/repo", "hook_event_name": "PreToolUse", "tool_use_id": "t"}
+
+        # Write / Edit / MultiEdit carry tool_input.file_path (absolute)
+        for tool in ("Write", "Edit", "MultiEdit"):
+            allowed, reason = evaluate_tool_call(dict(base, tool_name=tool, tool_input={
+                "file_path": "/repo/.agents/tasks/feat/state.json", "content": "{}"}))
+            self.assertFalse(allowed, tool)
+            self.assertIn("protected path", reason)
+
+        # NotebookEdit carries tool_input.notebook_path
+        allowed, _ = evaluate_tool_call(dict(base, tool_name="NotebookEdit", tool_input={
+            "notebook_path": "/repo/.agents/band/evil.ipynb", "new_source": "x"}))
+        self.assertFalse(allowed)
+
+        # The launcher is protected too
+        allowed, _ = evaluate_tool_call(dict(base, tool_name="Write", tool_input={
+            "file_path": "/repo/.agents/bin/band", "content": "exit 0"}))
+        self.assertFalse(allowed)
+
+        # Bash carries tool_input.command
+        allowed, _ = evaluate_tool_call(dict(base, tool_name="Bash", tool_input={
+            "command": "echo '{}' > .agents/tasks/feat/state.json", "description": "x"}))
+        self.assertFalse(allowed)
+
+        allowed, reason = evaluate_tool_call(dict(base, tool_name="Bash", tool_input={"command": "sh .agents/bin/band --status"}))
+        self.assertTrue(allowed, reason)
+        allowed, _ = evaluate_tool_call(dict(base, tool_name="Edit", tool_input={
+            "file_path": "/repo/src/main.py", "old_string": "a", "new_string": "b"}))
+        self.assertTrue(allowed)
+
+        # Garbage payloads never crash the guard
+        self.assertTrue(evaluate_tool_call({"raw": "not json"})[0])
+        self.assertTrue(evaluate_tool_call({"tool_input": "string"})[0])
+
+    def test_harness_detection(self):
+        self.assertEqual(detect_harness({"hook_event_name": "PreToolUse"}), "claude-code")
+        self.assertEqual(detect_harness({"tool_name": "write_to_file"}), "legacy")
+        self.assertEqual(detect_harness({}, "claude-code"), "claude-code")
+        self.assertEqual(detect_harness({"hook_event_name": "PreToolUse"}, "legacy"), "legacy")
+
+    def test_guard_response_claude_code(self):
+        deny = guard_response(False, "nope", "claude-code")
+        self.assertEqual(deny["exit_code"], 2)
+        self.assertIn("nope", deny["stderr"])
+        body = json.loads(deny["stdout"])
+        self.assertEqual(body, {"hookSpecificOutput": {
+            "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "nope"}})
+
+        allow = guard_response(True, "", "claude-code")
+        # Silent allow: never emit permissionDecision "allow" (would bypass user permission prompts)
+        self.assertEqual(allow, {"stdout": "", "stderr": "", "exit_code": 0})
+
+    def test_guard_response_legacy_unchanged(self):
+        self.assertEqual(json.loads(guard_response(True, "", "legacy")["stdout"]), {"decision": "allow"})
+        deny = guard_response(False, "nope", "legacy")
+        self.assertEqual(deny["exit_code"], 2)
+        self.assertEqual(json.loads(deny["stdout"])["decision"], "deny")
+
+    def test_stop_response(self):
+        block = stop_response({"decision": "continue", "reason": "fix tests"}, "claude-code")
+        self.assertEqual(block["exit_code"], 2)
+        self.assertIn("fix tests", block["stderr"])
+        self.assertEqual(json.loads(block["stdout"])["hookSpecificOutput"],
+                         {"hookEventName": "Stop", "decision": "continue", "reason": "fix tests"})
+
+        allow = stop_response({"decision": "allow", "reason": "done"}, "claude-code")
+        self.assertEqual(allow["exit_code"], 0)
+        self.assertEqual(allow["stdout"], "")
+
+        err = stop_response({"decision": "error", "reason": "boom"}, "claude-code")
+        self.assertEqual(err["exit_code"], 0)
+        self.assertIn("boom", json.loads(err["stdout"])["systemMessage"])
+
+        legacy = stop_response({"decision": "continue", "reason": "r"}, "legacy")
+        self.assertEqual(legacy["exit_code"], 0)
+        self.assertEqual(json.loads(legacy["stdout"]), {"decision": "continue", "reason": "r"})
 
 
 if __name__ == "__main__":

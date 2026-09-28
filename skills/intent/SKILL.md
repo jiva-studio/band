@@ -18,7 +18,7 @@ flowchart TD
     Grill5 --> SaveIntent["4. Author .agents/tasks/<slug>/intent.md
 (100% grounded in user answers, Zero Code)"]
     SaveIntent --> Validate{"5. MANDATORY VALIDATION
-(python3 -m band --validate-intent <file>)"}
+(sh .agents/bin/band --validate-intent <file>)"}
     Validate -->|Exit != 0 (Errors)| FixIntent["Fix intent.md violations"] --> Validate
     Validate -->|Exit 0 (Valid)| NextStep["6. Ready for `/spec` (Technical Architecture)"]
 ```
@@ -104,7 +104,7 @@ Generate `.agents/tasks/<slug>/intent.md` strictly reflecting the user's answers
 
 Execute the deterministic intent validator:
 ```bash
-python3 -m band --validate-intent .agents/tasks/<slug>/intent.md
+sh .agents/bin/band --validate-intent .agents/tasks/<slug>/intent.md
 ```
 - If the validator reports errors (exit code != 0), fix `intent.md` immediately until it exits with code 0.
 - If the validator passes (exit code 0), the intent is locked and ready for `/spec`.

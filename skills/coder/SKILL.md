@@ -14,7 +14,7 @@ Before writing any code or modifying any files, verify that the task specificati
 1. Locate `.agents/tasks/<slug>/done.yaml` (or `band.yaml`).
 2. Execute the validation gate:
    ```bash
-   python3 -m band --validate .agents/tasks/<slug>/done.yaml
+   sh .agents/bin/band --validate .agents/tasks/<slug>/done.yaml
    ```
 3. **HARD STOP RULE**:
    - If `done.yaml` / `band.yaml` does not exist or fails validation: **DO NOT WRITE CODE**.
@@ -50,6 +50,6 @@ Verify locally that all newly added behavior is covered by tests that fail if th
 When you finish implementation:
 1. Verify with the deterministic verification harness:
    ```bash
-   python3 -m band --spec .agents/tasks/<slug>/done.yaml
+   sh .agents/bin/band --spec .agents/tasks/<slug>/done.yaml
    ```
 2. The deterministic **Stop-Hook** will automatically verify all claims in `done.yaml` (compilation, unit tests, mutation score, critic checks). If any claim fails, review the exact error details and repair the implementation.

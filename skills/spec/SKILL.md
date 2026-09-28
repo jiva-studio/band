@@ -16,7 +16,7 @@ flowchart TD
     WriteSpec --> WriteDone["4. Generate .agents/tasks/<slug>/done.yaml
 (Declarative Claims: make, mutation, critic)"]
     WriteDone --> ValidateDone{"5. MANDATORY VALIDATION
-(python3 -m band --validate)"}
+(sh .agents/bin/band --validate)"}
     ValidateDone -->|Exit != 0 (Errors)| FixDone["Fix done.yaml schema/params"] --> ValidateDone
     ValidateDone -->|Exit 0 (Valid)| Complete["6. Spec Locked! Ready for /band"]
 ```
@@ -27,7 +27,7 @@ flowchart TD
    - E.g. `/spec auth-backend --intent auth-system` or `/spec feat-user-auth`
 2. Spin up an **isolated Git Worktree** for this spec:
    ```bash
-   python3 -m band --worktree <spec-slug> --intent <intent-slug>
+   sh .agents/bin/band --worktree <spec-slug> --intent <intent-slug>
    ```
    This automatically:
    - Creates a dedicated git branch `task/<spec-slug>`.
@@ -36,7 +36,7 @@ flowchart TD
    - Runs `WorktreeCreate` hook if configured.
 3. Validate `.agents/tasks/<spec-slug>/intent.md`:
    ```bash
-   python3 -m band --validate-intent .agents/tasks/<spec-slug>/intent.md
+   sh .agents/bin/band --validate-intent .agents/tasks/<spec-slug>/intent.md
    ```
    - If `intent.md` does not exist or fails validation (exit code != 0), STOP and instruct the user to run `/intent` first. Do NOT proceed to technical design on an invalid intent.
 
@@ -99,7 +99,7 @@ claims:
 
 Run the validation command in the terminal:
 ```bash
-python3 -m band --validate .agents/tasks/<slug>/done.yaml
+sh .agents/bin/band --validate .agents/tasks/<slug>/done.yaml
 ```
 
 * **HARD RULE**: The specification process **CANNOT finish** until this command exits with code `0`.

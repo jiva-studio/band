@@ -5,13 +5,13 @@ description: Hook-driven multi-agent pipeline orchestrator for autonomous featur
 
 # Hook-Driven Multi-Agent Pipeline Orchestrator (`/band`)
 
-The `/band` skill is a **deterministic, hook-driven workflow orchestrator**. Rather than relying solely on LLM prompt instructions that can be skipped or hallucinated, `/band` initializes the state machine (`state.json`), and the **external harness hook** (`python3 -m band --hook` in `.agents/hooks.json`) actively intercepts actions, runs deterministic checks, blocks premature stopping, and pushes the agent from stage to stage.
+The `/band` skill is a **deterministic, hook-driven workflow orchestrator**. Rather than relying solely on LLM prompt instructions that can be skipped or hallucinated, `/band` initializes the state machine (`state.json`), and the **external harness hook** (`sh .agents/bin/band --hook` in `.agents/hooks.json`) actively intercepts actions, runs deterministic checks, blocks premature stopping, and pushes the agent from stage to stage.
 
 ```mermaid
 flowchart TD
-    Trigger["User: /band"] --> InitFSM["1. Initialize Pipeline FSM\n(python3 -m band --start-pipeline)"]
+    Trigger["User: /band"] --> InitFSM["1. Initialize Pipeline FSM\n(sh .agents/bin/band --start-pipeline)"]
     
-    InitFSM --> HookLoop["2. External Hook Loop (.agents/hooks.json)\n- Hook intercepts turn completion / stop attempts\n- Evaluates active stage condition in pipeline.yaml\n- Runs verification tools & diff mutation analysis\n- Injects next stage directive or blocks completion"]
+    InitFSM --> HookLoop["2. External Hook Loop (.claude/settings.json or .agents/hooks.json)\n- Hook intercepts turn completion / stop attempts\n- Evaluates active stage condition in pipeline.yaml\n- Runs verification tools & diff mutation analysis\n- Injects next stage directive or blocks completion"]
     
     HookLoop --> StageAgent["Agent / Subagent Action\n- Executes current stage role (Author / Implementer / Reviewer)\n- Enforces forbidden edits & boundaries"]
     
@@ -29,16 +29,16 @@ flowchart TD
 1. **Activation**:
    When `/band` is invoked, start the pipeline for the active task:
    ```bash
-   python3 -m band --start-pipeline
+   sh .agents/bin/band --start-pipeline
    ```
    This loads the configured pipeline profile (from `done.yaml` or `.agents/pipelines/`), creates `.agents/tasks/<slug>/state.json`, and outputs the initial stage directive.
 
-2. **External Hook Enforcement (`.agents/hooks.json`)**:
+2. **External Hook Enforcement (`.claude/settings.json` for Claude Code, `.agents/hooks.json` for other harnesses)**:
    Every time the agent completes an action or attempts to finish a turn, the harness hook executes:
    ```bash
-   python3 -m band --hook
+   sh .agents/bin/band --hook
    ```
-   - **Blocks early exit**: Returns `{"decision": "continue", "reason": "..."}` if current stage requirements are unmet.
+   - **Blocks early exit**: Under Claude Code the Stop hook exits with code 2 and the failure reason (Claude keeps working); under other harnesses it returns `{"decision": "continue", "reason": "..."}` if current stage requirements are unmet.
    - **Evaluates stage transitions**:
      - *Red Phase*: Proves tests exist and fail (Red) before allowing implementation.
      - *Green Phase*: Confirms test files were not modified and test suite turns Green.
@@ -58,13 +58,13 @@ When working within the pipeline directed by the hook:
 - For subagent stages: spawn specialized subagents (`invoke_subagent`) matching the stage's `role` and context.
 - Check current status anytime with:
   ```bash
-  python3 -m band --status
+  sh .agents/bin/band --status
   ```
 - If you need to pause verification to answer user questions or accept feedback:
   ```bash
-  python3 -m band --pause
+  sh .agents/bin/band --pause
   ```
-  Resume with: `python3 -m band --resume`
+  Resume with: `sh .agents/bin/band --resume`
 
 ---
 
@@ -73,9 +73,9 @@ When all pipeline stages pass (`status: "completed"`):
 1. Review final diff with user.
 2. Merge verified task branch into main:
    ```bash
-   python3 -m band --merge <spec-slug>
+   sh .agents/bin/band --merge <spec-slug>
    ```
 3. Remove isolated worktree:
    ```bash
-   python3 -m band --cleanup <spec-slug>
+   sh .agents/bin/band --cleanup <spec-slug>
    ```

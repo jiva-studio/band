@@ -16,6 +16,8 @@ PROTECTED_PATH_PATTERNS = [
     ".agents/pipelines/*",
     "*/.agents/band/*",
     ".agents/band/*",
+    "*/.agents/bin/*",
+    ".agents/bin/*",
     "*pipelines/*.yaml",
     "*pipelines/*.yml",
 ]
@@ -29,7 +31,15 @@ DANGEROUS_COMMAND_PATTERNS = [
     r"python[0-9.]*\s+.*state\.json",
     r"(>|>>)\s*.*\.agents/pipelines",
     r"(>|>>)\s*.*\.agents/band",
+    r"(>|>>)\s*.*\.agents/bin",
 ]
+
+# Keys under which harnesses pass the target file path of an edit tool.
+# Claude Code: Edit/Write/MultiEdit -> file_path, NotebookEdit -> notebook_path.
+PATH_ARG_KEYS = ["file_path", "notebook_path", "target_file", "TargetFile", "path", "file", "filename", "target"]
+
+# Keys under which harnesses pass a shell command. Claude Code: Bash -> command.
+COMMAND_ARG_KEYS = ["command", "CommandLine", "cmd", "script"]
 
 
 def is_path_protected(path_str: str) -> bool:
@@ -73,27 +83,28 @@ def is_command_dangerous(command_str: str) -> Tuple[bool, str]:
 def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
     """
     Evaluates an incoming PreToolUse hook payload.
+
+    Accepts both Claude Code payloads ({"hook_event_name": "PreToolUse",
+    "tool_name": "Edit", "tool_input": {"file_path": ...}}) and the legacy
+    dialect ({"name"/"tool": ..., "args"/"arguments"/"params": {...}}).
     Returns (is_allowed, reason_if_denied).
     """
-    tool_name = (
-        payload.get("tool_name")
-        or payload.get("name")
-        or payload.get("tool")
-        or payload.get("matcher", "")
-    )
+    if not isinstance(payload, dict):
+        return True, ""
+
     args = payload.get("tool_input") or payload.get("args") or payload.get("arguments") or payload.get("params") or {}
 
     if not isinstance(args, dict):
         return True, ""
 
     # Check file editing tools
-    for key in ["target_file", "TargetFile", "path", "file_path", "file", "filename", "target"]:
+    for key in PATH_ARG_KEYS:
         target_path = args.get(key)
         if isinstance(target_path, str) and is_path_protected(target_path):
             return False, f"Direct editing of protected path '{target_path}' is forbidden. State transitions are managed exclusively by the Band harness."
 
     # Check command execution tools
-    for key in ["command", "CommandLine", "cmd", "script"]:
+    for key in COMMAND_ARG_KEYS:
         command_text = args.get(key)
         if isinstance(command_text, str):
             is_dang, reason = is_command_dangerous(command_text)
@@ -103,39 +114,14 @@ def evaluate_tool_call(payload: Dict[str, Any]) -> Tuple[bool, str]:
     return True, ""
 
 
-def run_guard():
-    """Entry point for PreToolUse hook runner."""
-    raw_input = ""
-    try:
-        if not sys.stdin.isatty():
-            raw_input = sys.stdin.read().strip()
-    except Exception:
-        raw_input = ""
+def run_guard(harness: str = "auto"):
+    """Entry point for PreToolUse hook runner (Claude Code or legacy dialect)."""
+    from band.hook_io import read_stdin_payload, detect_harness, guard_response, emit
 
-    payload = {}
-    if raw_input:
-        try:
-            payload = json.loads(raw_input)
-        except Exception:
-            payload = {"raw": raw_input}
-
+    payload = read_stdin_payload()
+    resolved = detect_harness(payload, harness)
     is_allowed, reason = evaluate_tool_call(payload)
-
-    if not is_allowed:
-        sys.stderr.write(f"\n🚫 [BAND PRE-TOOL GATE] {reason}\n")
-        response = {
-            "hookSpecificOutput": {
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            },
-            "decision": "deny",
-            "reason": reason,
-        }
-        print(json.dumps(response, indent=2))
-        sys.exit(2)
-    else:
-        print(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+    emit(guard_response(is_allowed, reason, resolved))
 
 
 if __name__ == "__main__":
