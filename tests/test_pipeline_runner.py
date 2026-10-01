@@ -1,6 +1,7 @@
 import tempfile
 import shutil
 import unittest
+from unittest import mock
 from pathlib import Path
 from band.pipeline_runner import PipelineRunner
 from band.pipeline_loader import load_pipeline_config
@@ -42,9 +43,6 @@ claims:
         self.assertEqual(res.get("decision"), "continue")
         self.assertTrue("red-phase" in res.get("reason", ""))
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_stage_allow_file_boundary(self):
         stage = {"id": "red-phase", "allow": ["tests/**", "**/*.spec.ts"]}
         # Only test file touched
@@ -75,3 +73,65 @@ if __name__ == "__main__":
         self.assertEqual(len(self.runner._check_stage_file_boundaries(stage, ["src/secret/keys.ts"], [])), 1)
         # docs/readme.md -> disallowed (not in allow)
         self.assertEqual(len(self.runner._check_stage_file_boundaries(stage, ["docs/readme.md"], [])), 1)
+
+    def test_stage_allow_root_level_test_file(self):
+        stage = {"id": "red-phase", "allow": ["tests/**", "**/*.test.*"]}
+        self.assertEqual(self.runner._check_stage_file_boundaries(stage, ["foo.test.ts"], []), [])
+
+    def test_stage_allow_ignores_band_control_area(self):
+        stage = {"id": "red-phase", "allow": ["tests/**"]}
+        self.assertEqual(self.runner._check_stage_file_boundaries(stage, [".agents/tasks/x/spec.md"], []), [])
+
+    def test_stage_without_allow_unrestricted(self):
+        stage = {"id": "free", "claims": []}
+        self.assertEqual(self.runner._check_stage_file_boundaries(stage, ["src/user.ts", "tests/a.py"], []), [])
+
+    def test_baseline_files_exempt(self):
+        stage = {"id": "red-phase", "allow": ["tests/**"]}
+        self.assertEqual(self.runner._check_stage_file_boundaries(stage, ["src/user.ts"], ["src/user.ts"]), [])
+
+    def test_stop_hook_blocks_red_phase_editing_production_code(self):
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=[]):
+            self.runner.init_pipeline()
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=["src/user.ts", "tests/test_user.py"]), \
+             mock.patch.object(PipelineRunner, "_evaluate_stage_claims", return_value=(True, [], "")):
+            res = self.runner.evaluate_and_advance(is_hook=True)
+        self.assertEqual(res["decision"], "continue")
+        self.assertIn("red-phase", res["reason"])
+        self.assertIn("src/user.ts", res["reason"])
+        self.assertIn("not in allow list", res["reason"])
+        self.assertNotIn("tests/test_user.py", res["reason"])
+        self.assertEqual(self.runner.read_state()["current_stage_id"], "red-phase")
+
+    def test_stop_hook_red_phase_test_file_advances(self):
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=[]):
+            self.runner.init_pipeline()
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=["tests/test_user.py"]), \
+             mock.patch.object(PipelineRunner, "_evaluate_stage_claims", return_value=(True, [], "")):
+            res = self.runner.evaluate_and_advance(is_hook=True)
+        self.assertIn("STAGE ADVANCEMENT", res["reason"])
+        self.assertEqual(self.runner.read_state()["current_stage_id"], "green-phase")
+
+    def test_stop_hook_green_phase_deny_key_enforced(self):
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=[]):
+            self.runner.init_pipeline()
+            state = self.runner.read_state()
+            state.update(current_stage_idx=1, current_stage_id="green-phase", stage_baselines={"green-phase": []})
+            self.runner.write_state(state)
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=["tests/test_user.py"]), \
+             mock.patch.object(PipelineRunner, "_evaluate_stage_claims", return_value=(True, [], "")):
+            res = self.runner.evaluate_and_advance(is_hook=True)
+        self.assertEqual(res["decision"], "continue")
+        self.assertIn("Denied modification", res["reason"])
+
+    def test_active_stage(self):
+        self.assertIsNone(self.runner.active_stage())
+        with mock.patch.object(PipelineRunner, "_get_changed_files", return_value=[]):
+            self.runner.init_pipeline()
+        self.assertEqual(self.runner.active_stage()["id"], "red-phase")
+        self.runner.pause_pipeline()
+        self.assertIsNone(self.runner.active_stage())
+
+
+if __name__ == "__main__":
+    unittest.main()

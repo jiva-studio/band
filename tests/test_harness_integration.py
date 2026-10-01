@@ -22,6 +22,7 @@ class TestBandHarnessIntegration(unittest.TestCase):
         shutil.copytree(repo_root / "band", self.agents_dir / "band")
         shutil.copytree(repo_root / "pipelines", self.agents_dir / "pipelines")
         shutil.copytree(repo_root / "skills", self.agents_dir / "skills")
+        shutil.copytree(repo_root / "bin", self.agents_dir / "bin")
         shutil.copy(repo_root / "hooks.json", self.agents_dir / "hooks.json")
 
         # Initialize a temporary git repo to test git operations
@@ -47,16 +48,19 @@ class TestBandHarnessIntegration(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def _run_band(self, args, env=None):
-        cmd = ["python3", "-m", "band"] + args
+    def _run_band(self, args, env=None, stdin=None):
+        # Go through the launcher exactly like the generated hooks do: it must find
+        # .agents/band without PYTHONPATH and without python3 necessarily on PATH.
+        cmd = ["sh", str(self.agents_dir / "bin" / "band")] + args
         current_env = os.environ.copy()
-        current_env["PYTHONPATH"] = str(self.agents_dir)
+        current_env.pop("PYTHONPATH", None)
         if env:
             current_env.update(env)
         return subprocess.run(
             cmd,
             cwd=self.test_dir,
             env=current_env,
+            input=stdin if stdin is not None else "",
             capture_output=True,
             text=True,
         )
@@ -86,6 +90,58 @@ class TestBandHarnessIntegration(unittest.TestCase):
         hook_payload = json.loads(res.stdout)
         self.assertEqual(hook_payload["decision"], "continue")
         self.assertIn("reason", hook_payload)
+
+    def test_stop_hook_claude_code_blocks_with_exit_2(self):
+        """Claude Code Stop hook: blocking = exit 2 + reason on stderr + hookSpecificOutput JSON."""
+        self._run_band(["--start-pipeline", str(self.spec_file)])
+        event = json.dumps({"session_id": "s", "hook_event_name": "Stop", "stop_hook_active": False, "cwd": self.test_dir})
+        res = self._run_band(["--hook", "--harness", "claude-code"], stdin=event)
+        self.assertEqual(res.returncode, 2, res.stderr)
+        self.assertIn("Stage [implementation]", res.stderr)
+        out = json.loads(res.stdout)
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "Stop")
+        self.assertEqual(out["hookSpecificOutput"]["decision"], "continue")
+        self.assertIn("Stage [implementation]", out["hookSpecificOutput"]["reason"])
+
+    def test_stop_hook_claude_code_allows_when_no_active_pipeline(self):
+        event = json.dumps({"session_id": "s", "hook_event_name": "Stop", "stop_hook_active": False})
+        res = self._run_band(["--hook", "--harness", "claude-code"], stdin=event)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(res.stdout.strip(), "")
+
+    def test_guard_claude_code_payload_via_launcher(self):
+        deny_event = json.dumps({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(self.task_dir / "state.json"), "content": "{}"},
+        })
+        res = self._run_band(["--guard", "--harness", "claude-code"], stdin=deny_event)
+        self.assertEqual(res.returncode, 2)
+        out = json.loads(res.stdout)
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertNotIn("decision", out)
+
+        allow_event = json.dumps({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+        })
+        res = self._run_band(["--guard"], stdin=allow_event)  # auto-detects Claude Code
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(res.stdout.strip(), "")
+
+    def test_init_links_claude_to_agents(self):
+        res = self._run_band(["--init"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        claude = Path(self.test_dir) / ".claude"
+        self.assertTrue(claude.is_symlink())
+        self.assertEqual(os.readlink(claude), ".agents")
+        self.assertIn("CLAUDE_LINK: .claude -> .agents", res.stdout)
+        settings = json.loads((claude / "settings.json").read_text())
+        self.assertIn("--guard --harness claude-code", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
+        self.assertIn("--hook --harness claude-code", settings["hooks"]["Stop"][0]["hooks"][0]["command"])
+        self.assertTrue((Path(self.test_dir) / ".claude" / "skills" / "band" / "SKILL.md").exists())
 
     def test_spec_claims_verification(self):
         """Verify direct claims verification against a done.yaml spec."""

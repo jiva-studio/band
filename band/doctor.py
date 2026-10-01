@@ -4,7 +4,13 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from band.config import REPO_ROOT
-from band.setup import detect_project_stack
+from band.setup import detect_project_stack, claude_settings_has_band_hooks
+from band.claude_link import claude_link_status
+from band.launcher import BAND_CMD, LAUNCHER_REL_PATH, resolve_interpreter
+
+# Works before the launcher exists (from the repo root, with any Python 3.8+).
+BAND_CMD_BOOTSTRAP = "PYTHONPATH=.agents python3 -m band"
+BAND_CMD_BOOTSTRAP_UV = "PYTHONPATH=.agents uv run --no-project python -m band"
 
 
 def check_git_capability(repo_root: Path) -> Dict[str, Any]:
@@ -75,6 +81,60 @@ def check_mutation_engine(repo_root: Path) -> Dict[str, Any]:
     }
 
 
+def check_interpreter(repo_root: Path) -> Dict[str, Any]:
+    """Checks that the .agents/bin/band launcher exists and can find a Python >= 3.8."""
+    launcher = repo_root / LAUNCHER_REL_PATH
+    interp = resolve_interpreter()
+    if not interp:
+        return {
+            "status": "FAIL",
+            "message": "No Python >= 3.8 found for hooks (tried $BAND_PYTHON, python3, python, uv).",
+            "tip": "Install python3 or uv, or export BAND_PYTHON=/path/to/python3."
+        }
+    note = ""
+    if interp["source"] == "uv":
+        note = " (python3 not on PATH; launcher falls back to uv)"
+    if not launcher.exists():
+        return {
+            "status": "WARN",
+            "message": f"Interpreter: {interp['command']}{note}, but launcher {LAUNCHER_REL_PATH} is missing.",
+            "tip": f"Run '{BAND_CMD_BOOTSTRAP} --init' (without python3: '{BAND_CMD_BOOTSTRAP_UV} --init') to write the launcher and hooks."
+        }
+    return {"status": "OK", "message": f"Launcher {LAUNCHER_REL_PATH} -> {interp['command']}{note}"}
+
+
+def check_claude_link(repo_root: Path) -> Dict[str, Any]:
+    """Checks that .claude is a symlink to the canonical .agents directory."""
+    state, detail = claude_link_status(repo_root)
+    tip = f"Run '{BAND_CMD} --init' to create the .claude -> .agents symlink (migrating a real .claude/ first)."
+    if state == "linked":
+        return {"status": "OK", "message": f".claude -> {detail} (single canonical .agents/ directory)."}
+    if state == "missing":
+        return {"status": "WARN", "message": ".claude is missing; Claude Code will not see .agents/ settings, skills or agents.", "tip": tip}
+    if state == "directory":
+        return {"status": "WARN", "message": ".claude is a real directory, not a symlink to .agents; Claude Code ignores .agents/settings.json.", "tip": tip}
+    if state == "foreign-link":
+        return {"status": "FAIL", "message": f".claude is a symlink to '{detail}', not to .agents.", "tip": tip}
+    return {"status": "FAIL", "message": ".claude is a regular file, not a symlink to .agents.", "tip": tip}
+
+
+def check_claude_hooks(repo_root: Path) -> Dict[str, Any]:
+    """Checks that Band's hooks are wired into .agents/settings.json (read by Claude Code via .claude)."""
+    settings_file = repo_root / ".agents" / "settings.json"
+    tip = f"Run '{BAND_CMD} --init' to merge Band hooks into .agents/settings.json."
+    if not settings_file.exists():
+        return {"status": "WARN", "message": ".agents/settings.json not found; Claude Code will not run Band hooks.", "tip": tip}
+    try:
+        data = json.loads(settings_file.read_text(encoding="utf-8") or "{}")
+    except Exception as e:
+        return {"status": "FAIL", "message": f"Invalid .agents/settings.json: {str(e)}"}
+    found = claude_settings_has_band_hooks(data)
+    missing = [ev for ev, ok in found.items() if not ok]
+    if not missing:
+        return {"status": "OK", "message": "PreToolUse Guard & Stop Hook registered in .agents/settings.json."}
+    return {"status": "WARN", "message": f"Band hooks missing in .agents/settings.json: {', '.join(missing)}.", "tip": tip}
+
+
 def check_hooks(repo_root: Path) -> Dict[str, Any]:
     """Checks if Band verification hooks and PreToolUse gates are wired."""
     hooks_file = repo_root / ".agents" / "hooks.json"
@@ -85,7 +145,7 @@ def check_hooks(repo_root: Path) -> Dict[str, Any]:
         return {
             "status": "WARN",
             "message": "Hooks configuration (.agents/hooks.json) not found.",
-            "tip": "Run 'python3 -m band --init' or '/band-install' to register Stop and PreToolUse hooks."
+            "tip": f"Run '{BAND_CMD} --init' or '/band-install' to register Stop and PreToolUse hooks."
         }
 
     try:
@@ -127,7 +187,10 @@ def run_doctor(repo_root: Path = REPO_ROOT) -> Dict[str, Any]:
         },
         "makefile": check_makefile(repo_root),
         "mutation": check_mutation_engine(repo_root),
+        "interpreter": check_interpreter(repo_root),
         "hooks": check_hooks(repo_root),
+        "claude_link": check_claude_link(repo_root),
+        "claude_hooks": check_claude_hooks(repo_root),
         "worktree": check_worktree_include(repo_root),
     }
 

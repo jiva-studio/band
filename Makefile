@@ -1,6 +1,6 @@
 .PHONY: test lint check self-test clean
 
-PYTHON ?= python3
+PYTHON ?= $(shell command -v python3 >/dev/null 2>&1 && echo python3 || echo "uv run --no-project python")
 PYTHONPATH := .
 
 test:

@@ -19,13 +19,13 @@ flowchart TD
     - Explain diff mutation testing (Stryker/mutmut)"]
     
     Propose --> AutoScaffold["3. Auto-Configure Repository
-    - Execute: python3 -m band --init
+    - Execute: sh .agents/bin/band --init
     - Add missing Makefile targets
     - Generate mutation config (stryker.config.json / mutmut)
     - Generate .worktreeinclude"]
     
     AutoScaffold --> Doctor["4. Run Verification Doctor
-    - Execute: python3 -m band --doctor
+    - Execute: sh .agents/bin/band --doctor
     - Run quick smoke test to prove readiness"]
     
     Doctor --> Done["5. Ready for /intent & /spec!"]
@@ -64,7 +64,7 @@ Formulate a concise plan for the user:
 >    - `setup` -> installs or synchronizes project dependencies.
 > 2. *Configure diff-based mutation testing tailored for your test framework.*
 > 3. *Set up `.worktreeinclude` to carry over your local environment files.*
-> 4. *Register Band deterministic verification hooks in `.agents/hooks.json`.*
+> 4. *Register Band deterministic verification hooks in `.agents/settings.json` (Claude Code, via the `.claude -> .agents` symlink) and `.agents/hooks.json` (other harnesses).*
 > 
 > *Proceed with this configuration?"*
 
@@ -74,7 +74,7 @@ Formulate a concise plan for the user:
 
 1. Initialize base Band plumbing:
    ```bash
-   python3 -m band --init
+   sh .agents/bin/band --init
    ```
 2. Tailor `Makefile` targets to match the project's real package manager, mono-repo layout, and test commands.
 3. If the project supports mutation testing (e.g. Stryker for JS/TS, mutmut for Python, cargo-mutants for Rust), configure a minimal configuration file or command.
@@ -86,7 +86,7 @@ Formulate a concise plan for the user:
 
 Run the health check:
 ```bash
-python3 -m band --doctor
+sh .agents/bin/band --doctor
 ```
 
 Confirm all checks pass:
@@ -94,7 +94,10 @@ Confirm all checks pass:
 - ✅ Stack & Test Runner
 - ✅ Makefile targets
 - ✅ Mutation Engine
-- ✅ Security Guard & Hooks
+- ✅ Interpreter & launcher (`.agents/bin/band`)
+- ✅ Security Guard & Hooks (`.agents/hooks.json`)
+- ✅ `.claude` is a symlink to `.agents`
+- ✅ Claude Code hooks (`.agents/settings.json`)
 
 ---
 

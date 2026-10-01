@@ -17,6 +17,7 @@ from band.pipeline_loader import validate_pipeline_manifest
 from band.engine import DoneEngine
 from band.pipeline_runner import PipelineRunner
 from band.guard import run_guard
+from band.hook_io import HARNESS_AUTO, HARNESS_CHOICES, HARNESS_CLAUDE, emit, read_stdin_payload, stop_response
 from band.worktree import create_worktree, merge_worktree, remove_worktree
 
 
@@ -90,6 +91,14 @@ def find_active_task_spec(is_hook_mode: bool = False) -> Optional[Path]:
     return None
 
 
+def _active_stage() -> Optional[dict]:
+    """The current stage of the active in-progress pipeline (for the PreToolUse guard)."""
+    spec_file = find_active_task_spec(is_hook_mode=True)
+    if not spec_file:
+        return None
+    return PipelineRunner(spec_file).active_stage()
+
+
 def resolve_spec_path(arg_val: str) -> Optional[Path]:
     p = Path(arg_val).resolve()
     if p.is_file():
@@ -124,12 +133,18 @@ def main():
     parser.add_argument("--task", type=str, help="Run verification for specific task slug in tasks/<slug>.")
     parser.add_argument("--hook", action="store_true", help="Run in Stop-hook mode with JSON stdin/stdout.")
     parser.add_argument("--guard", action="store_true", help="Run in PreToolUse security gate mode.")
+    parser.add_argument(
+        "--harness",
+        choices=HARNESS_CHOICES,
+        default=HARNESS_AUTO,
+        help="Hook I/O dialect for --guard/--hook: claude-code (.agents/settings.json via .claude symlink), legacy (.agents/hooks.json) or auto-detect.",
+    )
 
     args = parser.parse_args()
 
     # 0. PreToolUse Security Gate
     if args.guard:
-        run_guard()
+        run_guard(args.harness, stage_resolver=_active_stage)
 
     # 0.1 Doctor Diagnostic Mode
     if args.doctor:
@@ -294,6 +309,10 @@ def main():
 
     # 8. Hook mode (Driven by external Stop-hook)
     if args.hook:
+        harness = args.harness
+        if harness == HARNESS_CLAUDE:
+            # Claude Code sends the Stop event on stdin; consume it so the pipe is drained.
+            read_stdin_payload()
         try:
             if (
                 os.environ.get("DONE_GATE_DISABLE") == "1"
@@ -303,25 +322,23 @@ def main():
                 or os.environ.get("BAND_DISABLED") == "1"
                 or (REPO_ROOT / ".agents" / ".disabled").exists()
             ):
-                print(json.dumps({"decision": "allow"}))
-                sys.exit(0)
+                emit(stop_response({"decision": "allow"}, harness))
 
             spec_file = find_active_task_spec(is_hook_mode=True)
             if not spec_file:
                 # No active task for this branch/worktree -> pass through
-                print(json.dumps({"decision": "allow"}))
-                sys.exit(0)
+                emit(stop_response({"decision": "allow"}, harness))
 
             runner = PipelineRunner(spec_file)
             result = runner.evaluate_and_advance(is_hook=True)
-            print(json.dumps(result))
-            sys.exit(0)
+            emit(stop_response(result, harness))
+        except SystemExit:
+            raise
         except Exception as e:
-            print(json.dumps({
-                "decision": "continue",
-                "reason": f"Verification harness internal error: {str(e)}"
-            }))
-            sys.exit(0)
+            reason = f"Verification harness internal error: {str(e)}"
+            if harness == HARNESS_CLAUDE:
+                emit(stop_response({"decision": "error", "reason": reason}, harness))
+            emit(stop_response({"decision": "continue", "reason": reason}, harness))
 
     # 7. Direct execution mode
     target_spec = None

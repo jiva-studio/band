@@ -19,6 +19,7 @@ if [[ -d "${SCRIPT_DIR}/band" && -d "${SCRIPT_DIR}/pipelines" ]]; then
   cp -r "${SCRIPT_DIR}/band" "${AGENTS_DIR}/"
   cp -r "${SCRIPT_DIR}/pipelines" "${AGENTS_DIR}/"
   cp -r "${SCRIPT_DIR}/skills" "${AGENTS_DIR}/"
+  cp -r "${SCRIPT_DIR}/bin" "${AGENTS_DIR}/"
   cp "${SCRIPT_DIR}/hooks.json" "${AGENTS_DIR}/"
 else
   # Remote curl execution
@@ -32,6 +33,7 @@ else
     cp -r "${TMP_DIR}/band/band" "${AGENTS_DIR}/"
     cp -r "${TMP_DIR}/band/pipelines" "${AGENTS_DIR}/"
     cp -r "${TMP_DIR}/band/skills" "${AGENTS_DIR}/"
+    cp -r "${TMP_DIR}/band/bin" "${AGENTS_DIR}/"
     cp "${TMP_DIR}/band/hooks.json" "${AGENTS_DIR}/"
   else
     echo "Error: 'git' is required to fetch Band." >&2
@@ -40,15 +42,19 @@ else
 fi
 
 chmod -R u+rw "${AGENTS_DIR}"
+chmod +x "${AGENTS_DIR}/bin/band"
 
 echo "✅ Band harness successfully installed at ${AGENTS_DIR}"
 echo ""
-echo "Security & Verification Gates Enabled:"
-echo "  🛡️ PreToolUse Gate:  python3 -m band --guard (protects state.json & pipelines)"
-echo "  🛑 Stop Hook:        python3 -m band --hook  (validates stage claims & FSM)"
+echo "Launcher: sh .agents/bin/band  (uses \$BAND_PYTHON, python3, python, or 'uv run --no-project python')"
+echo ""
+echo "Security & Verification Gates:"
+echo "  🛡️ PreToolUse Gate:  sh .agents/bin/band --guard (protects state.json & pipelines)"
+echo "  🛑 Stop Hook:        sh .agents/bin/band --hook  (validates stage claims & FSM)"
 echo ""
 echo "Next steps:"
-echo "  1. Run /band-install (or 'python3 -m band --init') to auto-configure Makefile and mutations"
-echo "  2. Run 'python3 -m band --doctor' to verify environment readiness"
+echo "  1. Run 'sh .agents/bin/band --init' (or /band-install) to wire hooks into .agents/hooks.json"
+echo "     and .agents/settings.json, and link .claude -> .agents for Claude Code"
+echo "  2. Run 'sh .agents/bin/band --doctor' to verify environment readiness"
 echo "  3. Start task intent with /intent <task-slug>"
 
